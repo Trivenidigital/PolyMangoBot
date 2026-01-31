@@ -1,0 +1,11 @@
+# Dry run mode (simulation)
+python main_v4.py --dry-run
+
+# Live trading
+python main_v4.py
+
+# With debug logging
+python main_v4.py --debug
+
+# With custom config
+python main_v4.py --config config.json

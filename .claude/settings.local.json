@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main_v2.py:*)",
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "Bash(pip install:*)",
+      "Bash(C:projectspolymangobotvenvScriptspip install websockets)",
+      "Bash(venvScriptspip install websockets aiohttp python-dotenv)",
+      "Bash(./venv/Scripts/pip install:*)",
+      "Bash(./venv/Scripts/python:*)",
+      "Bash(dir:*)"
+    ]
+  }
+}
