@@ -50,6 +50,15 @@ from advanced_ml_predictor import AdvancedMLPredictor, PredictionResult
 from advanced_mm_tracker import AdvancedMMTracker
 from advanced_kelly_sizer import AdvancedKellySizer
 from regulatory_monitor import RegulatoryMonitor
+from mm_exploitation_strategies import (
+    MMExploitationEngine,
+    InventoryFadeSignal,
+    SpreadRegimeAnalysis,
+    QuoteStuffingAlert,
+    FadeSignalStrength,
+    SpreadRegime,
+    QuoteStuffingType
+)
 
 # Setup logging
 logging.basicConfig(
@@ -330,6 +339,7 @@ class PolyMangoBotV4:
         self.venue_analyzer: Optional[AdvancedVenueAnalyzer] = None
         self.ml_predictor: Optional[AdvancedMLPredictor] = None
         self.mm_tracker: Optional[AdvancedMMTracker] = None
+        self.mm_exploitation: Optional[MMExploitationEngine] = None
         self.kelly_sizer: Optional[AdvancedKellySizer] = None
         self.regulatory_monitor: Optional[RegulatoryMonitor] = None
 
@@ -393,6 +403,10 @@ class PolyMangoBotV4:
             # Initialize MM tracker
             logger.info("Initializing market maker tracker...")
             self.mm_tracker = AdvancedMMTracker()
+
+            # Initialize MM exploitation engine
+            logger.info("Initializing MM exploitation engine...")
+            self.mm_exploitation = MMExploitationEngine()
 
             # Initialize Kelly sizer
             logger.info("Initializing position sizer...")
@@ -509,6 +523,19 @@ class PolyMangoBotV4:
             logger.debug("No market data available")
             return
 
+        # Step 1.5: Update MM exploitation engine with market data
+        with latency_tracker("mm_exploitation_update"):
+            mm_analysis = await self._update_mm_exploitation(market_data)
+
+        # Check for quote stuffing - pause if severe manipulation detected
+        if mm_analysis.get("should_pause"):
+            logger.warning(
+                f"Quote stuffing detected - pausing trading | "
+                f"Type: {mm_analysis.get('stuffing_type')} | "
+                f"Severity: {mm_analysis.get('severity', 0):.2f}"
+            )
+            return
+
         # Step 2: Detect opportunities
         with latency_tracker("detect_opportunities"):
             opportunities = await self._detect_opportunities(market_data)
@@ -526,6 +553,10 @@ class PolyMangoBotV4:
         # Step 4: Get ML predictions
         with latency_tracker("ml_predictions"):
             predictions = await self._get_predictions(scored)
+
+        # Step 4.5: Apply MM exploitation signals
+        with latency_tracker("mm_exploitation_signals"):
+            predictions = await self._apply_mm_signals(predictions, mm_analysis)
 
         # Step 5: Calculate position sizes
         with latency_tracker("position_sizing"):
@@ -725,22 +756,44 @@ class PolyMangoBotV4:
         return results
 
     async def _size_positions(self, opportunities: List[Dict]) -> List[Dict]:
-        """Calculate position sizes"""
+        """Calculate position sizes with MM exploitation adjustments"""
         sized = []
 
         for opp in opportunities:
+            # Adjust win probability based on MM boost if present
+            win_prob = opp["prediction"].probability
+            if opp.get("mm_boost"):
+                # MM signal aligns with our trade - boost probability estimate
+                win_prob = min(0.95, win_prob * opp["mm_boost"])
+
             # Get Kelly recommendation
             recommendation = self.kelly_sizer.calculate_position(
                 opportunity={
                     "expected_profit": opp["scored"].expected_profit,
-                    "win_probability": opp["prediction"].probability,
+                    "win_probability": win_prob,
                     "loss_if_wrong": opp["scored"].expected_profit * 0.5
                 }
             )
 
             if recommendation.should_trade:
-                opp["position_size"] = recommendation.position_size
+                base_size = recommendation.position_size
+
+                # Apply MM exploitation size multiplier
+                mm_multiplier = opp.get("mm_size_multiplier", 1.0)
+                adjusted_size = base_size * mm_multiplier
+
+                opp["position_size"] = adjusted_size
                 opp["kelly_fraction"] = recommendation.kelly_fraction
+                opp["base_position_size"] = base_size
+                opp["mm_adjusted"] = mm_multiplier != 1.0
+
+                if opp["mm_adjusted"]:
+                    logger.info(
+                        f"[POSITION SIZING] {opp['scored'].opportunity_id}: "
+                        f"base={base_size:.4f}, mm_mult={mm_multiplier:.2f}, "
+                        f"final={adjusted_size:.4f}"
+                    )
+
                 sized.append(opp)
 
         return sized
@@ -836,6 +889,214 @@ class PolyMangoBotV4:
                 "timestamp": datetime.now().timestamp()
             })
 
+            # Record outcome for MM exploitation calibration
+            if self.mm_exploitation and execution.success:
+                self.mm_exploitation.record_fade_outcome(
+                    venue=scored.buy_venue,
+                    market=scored.opportunity_id.split("_")[1] if "_" in scored.opportunity_id else "BTC",
+                    signal_timestamp=time.time(),
+                    entry_price=scored.buy_price,
+                    exit_price=execution.realized_profit / opp["position_size"] + scored.buy_price if opp["position_size"] > 0 else scored.buy_price,
+                    direction="buy",
+                    duration_ms=(time.time() - iteration_start) * 1000 if 'iteration_start' in dir() else 0
+                )
+
+    async def _update_mm_exploitation(self, market_data: Dict) -> Dict:
+        """
+        Update MM exploitation engine with current market data.
+
+        Returns analysis including:
+        - Quote stuffing detection
+        - Spread regime analysis
+        - Inventory fade signals
+        """
+        if not self.mm_exploitation:
+            return {"should_pause": False}
+
+        analysis_results = {
+            "should_pause": False,
+            "stuffing_type": None,
+            "severity": 0.0,
+            "markets": {}
+        }
+
+        for key, data in market_data.items():
+            venue = data["venue"]
+            market = data["market"]
+            mid_price = (data["bid"] + data["ask"]) / 2
+            spread = data["ask"] - data["bid"]
+
+            # Get MM inventory estimate from tracker
+            inventory_estimate = 0.0
+            if self.mm_tracker:
+                inventory_info = self.mm_tracker.get_inventory_estimate(venue, market)
+                inventory_estimate = inventory_info.get("estimate", 0.0)
+
+            # Build order book for quote stuffing detection
+            bids = [{"price": data["bid"], "quantity": data["bid_volume"]}]
+            asks = [{"price": data["ask"], "quantity": data["ask_volume"]}]
+
+            # Update MM exploitation engine
+            self.mm_exploitation.update(
+                venue=venue,
+                market=market,
+                inventory_estimate=inventory_estimate,
+                mid_price=mid_price,
+                spread=spread,
+                bids=bids,
+                asks=asks
+            )
+
+            # Get comprehensive analysis
+            mm_analysis = self.mm_exploitation.get_comprehensive_analysis(
+                venue=venue,
+                market=market,
+                current_price=mid_price,
+                current_spread=spread
+            )
+
+            analysis_results["markets"][key] = mm_analysis
+
+            # Check for quote stuffing that requires pausing
+            if mm_analysis.get("stuffing_alert"):
+                stuffing = mm_analysis["stuffing_alert"]
+                if stuffing.get("should_pause_trading"):
+                    analysis_results["should_pause"] = True
+                    analysis_results["stuffing_type"] = stuffing.get("stuffing_type")
+                    analysis_results["severity"] = stuffing.get("severity", 0)
+
+                    logger.warning(
+                        f"[MM EXPLOITATION] Quote stuffing detected on {venue}/{market}: "
+                        f"{stuffing.get('stuffing_type')} (severity: {stuffing.get('severity', 0):.2f})"
+                    )
+
+            # Log significant fade signals
+            fade_signal = mm_analysis.get("fade_signal", {})
+            if fade_signal.get("strength") not in [None, "none", FadeSignalStrength.NONE.value]:
+                logger.info(
+                    f"[MM EXPLOITATION] Fade signal on {venue}/{market}: "
+                    f"{fade_signal.get('direction')} ({fade_signal.get('strength')}) "
+                    f"z-score: {fade_signal.get('mm_inventory_zscore', 0):.2f}"
+                )
+
+            # Log spread regime changes
+            spread_analysis = mm_analysis.get("spread_analysis", {})
+            if spread_analysis.get("is_optimal_entry"):
+                logger.debug(
+                    f"[MM EXPLOITATION] Optimal entry on {venue}/{market}: "
+                    f"regime={spread_analysis.get('current_regime')}, "
+                    f"score={spread_analysis.get('entry_score', 0):.2f}"
+                )
+
+        return analysis_results
+
+    async def _apply_mm_signals(
+        self,
+        opportunities: List[Dict],
+        mm_analysis: Dict
+    ) -> List[Dict]:
+        """
+        Apply MM exploitation signals to filter and enhance opportunities.
+
+        This method:
+        1. Filters out opportunities in markets with quote stuffing
+        2. Adjusts position sizes based on MM inventory fade signals
+        3. Adjusts timing based on spread regime analysis
+        """
+        if not self.mm_exploitation or not mm_analysis:
+            return opportunities
+
+        enhanced = []
+
+        for opp in opportunities:
+            scored = opp["scored"]
+
+            # Get market key
+            buy_key = f"{scored.buy_venue}_{scored.opportunity_id.split('_')[1] if '_' in scored.opportunity_id else 'BTC'}"
+            sell_key = f"{scored.sell_venue}_{scored.opportunity_id.split('_')[1] if '_' in scored.opportunity_id else 'BTC'}"
+
+            # Get MM analysis for both venues
+            buy_mm = mm_analysis.get("markets", {}).get(buy_key, {})
+            sell_mm = mm_analysis.get("markets", {}).get(sell_key, {})
+
+            # Skip if either venue has severe quote stuffing
+            for mm in [buy_mm, sell_mm]:
+                if mm.get("stuffing_alert", {}).get("should_pause_trading"):
+                    logger.debug(f"Skipping {scored.opportunity_id} due to quote stuffing")
+                    self.stats.opportunities_skipped += 1
+                    continue
+
+            # Get recommendations from both venues
+            buy_rec = buy_mm.get("recommendation", {})
+            sell_rec = sell_mm.get("recommendation", {})
+
+            # Calculate combined size multiplier from MM signals
+            size_multiplier = 1.0
+            mm_reasons = []
+
+            # Apply size adjustments from MM recommendations
+            if buy_rec.get("size_multiplier"):
+                size_multiplier *= buy_rec["size_multiplier"]
+                if buy_rec.get("warnings"):
+                    mm_reasons.extend(buy_rec["warnings"])
+
+            if sell_rec.get("size_multiplier"):
+                size_multiplier *= sell_rec["size_multiplier"]
+                if sell_rec.get("warnings"):
+                    mm_reasons.extend(sell_rec["warnings"])
+
+            # Check for fade signal alignment
+            buy_fade = buy_mm.get("fade_signal", {})
+            sell_fade = sell_mm.get("fade_signal", {})
+
+            # If we're buying and MM is distributing (likely to push price down),
+            # this is favorable - boost confidence
+            if buy_fade.get("direction") == "buy" and buy_fade.get("confidence", 0) > 0.6:
+                opp["mm_boost"] = 1.1
+                mm_reasons.append("MM fade signal supports buy")
+            elif buy_fade.get("direction") == "sell" and buy_fade.get("confidence", 0) > 0.6:
+                # Counter to our buy - reduce size
+                size_multiplier *= 0.8
+                mm_reasons.append("MM fade signal opposes buy")
+
+            # Apply spread regime adjustments
+            buy_spread = buy_mm.get("spread_analysis", {})
+            sell_spread = sell_mm.get("spread_analysis", {})
+
+            # If spread is wide, reduce size
+            if buy_spread.get("current_regime") in ["wide", "very_wide", "extreme"]:
+                size_multiplier *= 0.9
+                mm_reasons.append(f"Wide spread on buy venue: {buy_spread.get('current_spread_bps', 0):.1f}bps")
+
+            if sell_spread.get("current_regime") in ["wide", "very_wide", "extreme"]:
+                size_multiplier *= 0.9
+                mm_reasons.append(f"Wide spread on sell venue: {sell_spread.get('current_spread_bps', 0):.1f}bps")
+
+            # If both venues have optimal entry, boost confidence
+            if buy_spread.get("is_optimal_entry") and sell_spread.get("is_optimal_entry"):
+                opp["mm_boost"] = opp.get("mm_boost", 1.0) * 1.1
+                mm_reasons.append("Optimal spread conditions on both venues")
+
+            # Store MM analysis in opportunity
+            opp["mm_size_multiplier"] = max(0.3, min(1.5, size_multiplier))
+            opp["mm_reasons"] = mm_reasons
+            opp["mm_analysis"] = {
+                "buy": buy_mm.get("recommendation", {}),
+                "sell": sell_mm.get("recommendation", {})
+            }
+
+            # Log significant MM adjustments
+            if size_multiplier != 1.0 or mm_reasons:
+                logger.info(
+                    f"[MM SIGNALS] {scored.opportunity_id}: "
+                    f"size_mult={size_multiplier:.2f}, "
+                    f"reasons={mm_reasons}"
+                )
+
+            enhanced.append(opp)
+
+        return enhanced
+
     def pause(self):
         """Pause trading"""
         self._paused = True
@@ -892,6 +1153,15 @@ class PolyMangoBotV4:
             logger.info(f"Compliance Status: {compliance['overall_status']}")
             logger.info(f"Compliance Violations: {self.stats.compliance_violations}")
 
+        # MM Exploitation report
+        if self.mm_exploitation:
+            logger.info("-" * 60)
+            logger.info("MM EXPLOITATION SUMMARY")
+            logger.info("-" * 60)
+            mm_stats = self.mm_exploitation.get_stats()
+            logger.info(f"Active Markets Tracked: {len(mm_stats.get('active_markets', []))}")
+            logger.info(f"Total MM Analyses: {mm_stats.get('total_analyses', 0)}")
+
     def get_status(self) -> Dict:
         """Get current bot status including latency metrics"""
         status = {
@@ -913,6 +1183,16 @@ class PolyMangoBotV4:
 
         if self.ml_predictor:
             status["ml"] = self.ml_predictor.get_stats()
+
+        # Add MM exploitation stats
+        if self.mm_exploitation:
+            status["mm_exploitation"] = self.mm_exploitation.get_stats()
+
+        # Add MM tracker stats
+        if self.mm_tracker:
+            status["mm_tracker"] = {
+                "profiles": self.mm_tracker.get_all_mm_profiles()
+            }
 
         # Add latency metrics
         status["latency"] = latency_monitor.get_all_stats()
