@@ -310,9 +310,7 @@ def should_enter(microstructure_data: Dict) -> Tuple[bool, float]:
 
 #### **1. Feature Engineering Enhancement**
 
-```python
 # Current: Basic price/volume features
-# Missing: Temporal features, interaction terms, lagged features
 
 # Enhanced feature set:
 ENHANCED_FEATURES = {
@@ -481,7 +479,6 @@ Problems:
 - No order splitting for size
 - No adaptive order types
 - No queue position optimization
-```
 
 ### **Strategy 1: Adaptive Order Types**
 

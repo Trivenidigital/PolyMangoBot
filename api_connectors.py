@@ -1,7 +1,13 @@
 """
 API Connector Module
-Handles all communication with Polymarket and exchanges
-With proper error handling, retry logic, and rate limiting
+Handles all communication with Polymarket and exchanges.
+
+Features:
+- Connection pooling for efficient HTTP connections
+- HMAC request signing for authenticated endpoints
+- Proper error handling and retry logic
+- Rate limiting with token bucket
+- Log sanitization for sensitive data
 """
 
 import aiohttp
@@ -17,33 +23,102 @@ from exceptions import (
     APIResponseError, APIAuthenticationError
 )
 from utils import retry_async, RateLimiter
+from constants import (
+    DEFAULT_API_TIMEOUT,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_READ_TIMEOUT,
+    DEFAULT_RATE_LIMIT_RPS,
+    DEFAULT_BURST_SIZE,
+    DEFAULT_CONNECTION_LIMIT,
+    DEFAULT_CONNECTION_LIMIT_PER_HOST,
+    MAX_RESPONSE_BODY_LOG_LENGTH,
+)
+from security import (
+    sanitize_for_logging,
+    sanitize_headers,
+    get_secure_config,
+    RequestSigner
+)
 
 load_dotenv()
 
 logger = logging.getLogger("PolyMangoBot.api")
 
+# Global connection pool for reuse across API instances
+_global_connector: Optional[aiohttp.TCPConnector] = None
+
+
+def get_connection_pool() -> aiohttp.TCPConnector:
+    """
+    Get or create a global connection pool.
+
+    Connection pooling improves performance by reusing TCP connections.
+    """
+    global _global_connector
+    if _global_connector is None or _global_connector.closed:
+        _global_connector = aiohttp.TCPConnector(
+            limit=DEFAULT_CONNECTION_LIMIT,
+            limit_per_host=DEFAULT_CONNECTION_LIMIT_PER_HOST,
+            enable_cleanup_closed=True,
+            force_close=False,
+            keepalive_timeout=30.0
+        )
+    return _global_connector
+
+
+async def close_connection_pool():
+    """Close the global connection pool."""
+    global _global_connector
+    if _global_connector and not _global_connector.closed:
+        await _global_connector.close()
+        _global_connector = None
+
 
 class PolymarketAPI:
     """Polymarket API wrapper with retry logic and rate limiting"""
 
-    def __init__(self, rate_limit: float = 10.0):  # 10 requests per second
+    def __init__(self, rate_limit: float = DEFAULT_RATE_LIMIT_RPS):
         self.base_url = "https://clob.polymarket.com"
-        self.api_key = os.getenv("POLYMARKET_API_KEY")
-        self.api_secret = os.getenv("POLYMARKET_API_SECRET")
+        # Load credentials securely
+        secure_config = get_secure_config()
+        try:
+            creds = secure_config.load_polymarket_credentials(required=False)
+            self.api_key = creds.api_key
+            self.api_secret = creds.api_secret
+            self._credentials_valid = creds.is_valid
+        except Exception as e:
+            logger.warning(f"Failed to load Polymarket credentials: {e}")
+            self.api_key = ""
+            self.api_secret = ""
+            self._credentials_valid = False
+
         self.session: Optional[aiohttp.ClientSession] = None
-        self.rate_limiter = RateLimiter(rate=rate_limit, burst=5)
+        self.rate_limiter = RateLimiter(rate=rate_limit, burst=DEFAULT_BURST_SIZE)
         self._connected = False
 
     @property
     def is_connected(self) -> bool:
         return self._connected and self.session is not None
 
+    @property
+    def has_valid_credentials(self) -> bool:
+        return self._credentials_valid
+
     async def connect(self):
-        """Initialize async session with proper timeout configuration"""
-        timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
-        self.session = aiohttp.ClientSession(timeout=timeout)
+        """Initialize async session with connection pooling and proper timeouts"""
+        timeout = aiohttp.ClientTimeout(
+            total=DEFAULT_API_TIMEOUT,
+            connect=DEFAULT_CONNECT_TIMEOUT,
+            sock_read=DEFAULT_READ_TIMEOUT
+        )
+        # Use global connection pool for efficiency
+        self.session = aiohttp.ClientSession(
+            timeout=timeout,
+            connector=get_connection_pool(),
+            connector_owner=False  # Don't close the shared connector
+        )
         self._connected = True
-        logger.info("Polymarket API connected")
+        logger.info("Polymarket API connected (using connection pool)")
 
     async def disconnect(self):
         """Close session gracefully"""
@@ -55,10 +130,16 @@ class PolymarketAPI:
 
     def _get_headers(self) -> Dict[str, str]:
         """Get request headers with authentication"""
-        return {
-            "Authorization": f"Bearer {self.api_key}" if self.api_key else "",
+        headers = {
             "Content-Type": "application/json"
         }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _get_headers_for_logging(self) -> Dict[str, str]:
+        """Get sanitized headers safe for logging"""
+        return sanitize_headers(self._get_headers())
 
     @retry_async(
         max_attempts=3,
@@ -136,7 +217,8 @@ class PolymarketAPI:
         url = f"{self.base_url}/orders"
         headers = self._get_headers()
 
-        logger.debug(f"Placing Polymarket order: {order}")
+        # Log sanitized order (hide sensitive data)
+        logger.debug(f"Placing Polymarket order: {sanitize_for_logging(order)}")
 
         try:
             async with self.session.post(url, json=order, headers=headers) as resp:
@@ -192,33 +274,61 @@ class PolymarketAPI:
 
 
 class ExchangeAPI:
-    """Generic exchange API wrapper with retry logic and rate limiting"""
+    """
+    Generic exchange API wrapper with retry logic, rate limiting, and HMAC signing.
+
+    Supports authenticated requests via HMAC signing for Kraken and Coinbase.
+    """
 
     # Exchange base URLs
     EXCHANGE_URLS = {
         "kraken": "https://api.kraken.com",
-        "coinbase": "https://api.coinbase.com",
+        "coinbase": "https://api.exchange.coinbase.com",
     }
 
-    def __init__(self, exchange_name: str = "kraken", rate_limit: float = 10.0):
+    def __init__(self, exchange_name: str = "kraken", rate_limit: float = DEFAULT_RATE_LIMIT_RPS):
         self.exchange_name = exchange_name.lower()
-        self.api_key = os.getenv(f"{exchange_name.upper()}_API_KEY")
-        self.api_secret = os.getenv(f"{exchange_name.upper()}_API_SECRET")
         self.base_url = self.EXCHANGE_URLS.get(self.exchange_name, "https://api.kraken.com")
         self.session: Optional[aiohttp.ClientSession] = None
-        self.rate_limiter = RateLimiter(rate=rate_limit, burst=5)
+        self.rate_limiter = RateLimiter(rate=rate_limit, burst=DEFAULT_BURST_SIZE)
         self._connected = False
+
+        # Load credentials securely
+        secure_config = get_secure_config()
+        self._request_signer = secure_config.get_request_signer(self.exchange_name)
+        self._credentials_valid = self._request_signer is not None
+
+        # Store for compatibility (but prefer using signer)
+        if self._request_signer:
+            self.api_key = self._request_signer.api_key
+            self.api_secret = self._request_signer.api_secret
+        else:
+            self.api_key = ""
+            self.api_secret = ""
 
     @property
     def is_connected(self) -> bool:
         return self._connected and self.session is not None
 
+    @property
+    def has_valid_credentials(self) -> bool:
+        return self._credentials_valid
+
     async def connect(self):
-        """Initialize async session with proper timeout configuration"""
-        timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=15)
-        self.session = aiohttp.ClientSession(timeout=timeout)
+        """Initialize async session with connection pooling and proper timeouts"""
+        timeout = aiohttp.ClientTimeout(
+            total=DEFAULT_API_TIMEOUT,
+            connect=DEFAULT_CONNECT_TIMEOUT,
+            sock_read=DEFAULT_READ_TIMEOUT
+        )
+        # Use global connection pool for efficiency
+        self.session = aiohttp.ClientSession(
+            timeout=timeout,
+            connector=get_connection_pool(),
+            connector_owner=False  # Don't close the shared connector
+        )
         self._connected = True
-        logger.info(f"{self.exchange_name.capitalize()} API connected")
+        logger.info(f"{self.exchange_name.capitalize()} API connected (using connection pool)")
 
     async def disconnect(self):
         """Close session gracefully"""
@@ -227,6 +337,12 @@ class ExchangeAPI:
             self.session = None
         self._connected = False
         logger.info(f"{self.exchange_name.capitalize()} API disconnected")
+
+    def _get_signed_headers(self, method: str, url_path: str, data: Dict = None, body: str = "") -> Dict[str, str]:
+        """Get headers with HMAC signature for authenticated requests"""
+        if self._request_signer:
+            return self._request_signer.sign_request(method, url_path, data, body)
+        return {"Content-Type": "application/json"}
 
     @retry_async(max_attempts=3, base_delay=1.0, retryable_exceptions=(APITimeoutError, APIConnectionError))
     async def get_ticker(self, symbol: str) -> Dict:

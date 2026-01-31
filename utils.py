@@ -328,47 +328,107 @@ class RateLimiter:
 
 
 class TimingStats:
-    """Track timing statistics for operations"""
+    """
+    Track timing statistics for operations.
+
+    Uses collections.deque for O(1) bounded operations instead of list slicing.
+    Caches sorted array for efficient percentile calculations.
+    """
 
     def __init__(self, max_samples: int = 1000):
-        self.samples: List[float] = []
+        from collections import deque
+        self._samples: deque = deque(maxlen=max_samples)
         self.max_samples = max_samples
+        self._sorted_cache: Optional[List[float]] = None
+        self._cache_valid = False
 
     def record(self, duration_ms: float) -> None:
-        """Record a timing sample"""
-        self.samples.append(duration_ms)
-        if len(self.samples) > self.max_samples:
-            self.samples.pop(0)
+        """Record a timing sample - O(1) operation"""
+        self._samples.append(duration_ms)
+        self._cache_valid = False  # Invalidate cache
+
+    def _ensure_sorted_cache(self) -> List[float]:
+        """Ensure sorted cache is up to date"""
+        if not self._cache_valid or self._sorted_cache is None:
+            self._sorted_cache = sorted(self._samples)
+            self._cache_valid = True
+        return self._sorted_cache
+
+    @property
+    def count(self) -> int:
+        """Number of samples recorded"""
+        return len(self._samples)
+
+    @property
+    def samples(self) -> List[float]:
+        """Get samples as list (for compatibility)"""
+        return list(self._samples)
 
     @property
     def avg_ms(self) -> float:
         """Average duration in milliseconds"""
-        if not self.samples:
+        if not self._samples:
             return 0
-        return sum(self.samples) / len(self.samples)
+        return sum(self._samples) / len(self._samples)
 
     @property
     def min_ms(self) -> float:
         """Minimum duration in milliseconds"""
-        if not self.samples:
+        if not self._samples:
             return 0
-        return min(self.samples)
+        return min(self._samples)
 
     @property
     def max_ms(self) -> float:
         """Maximum duration in milliseconds"""
-        if not self.samples:
+        if not self._samples:
             return 0
-        return max(self.samples)
+        return max(self._samples)
+
+    @property
+    def p50_ms(self) -> float:
+        """50th percentile (median) duration in milliseconds"""
+        if not self._samples:
+            return 0
+        sorted_samples = self._ensure_sorted_cache()
+        idx = len(sorted_samples) // 2
+        return sorted_samples[idx]
 
     @property
     def p95_ms(self) -> float:
         """95th percentile duration in milliseconds"""
-        if not self.samples:
+        if not self._samples:
             return 0
-        sorted_samples = sorted(self.samples)
+        sorted_samples = self._ensure_sorted_cache()
         idx = int(len(sorted_samples) * 0.95)
         return sorted_samples[min(idx, len(sorted_samples) - 1)]
+
+    @property
+    def p99_ms(self) -> float:
+        """99th percentile duration in milliseconds"""
+        if not self._samples:
+            return 0
+        sorted_samples = self._ensure_sorted_cache()
+        idx = int(len(sorted_samples) * 0.99)
+        return sorted_samples[min(idx, len(sorted_samples) - 1)]
+
+    def to_dict(self) -> dict:
+        """Export stats as dictionary"""
+        return {
+            "count": self.count,
+            "avg_ms": round(self.avg_ms, 3),
+            "min_ms": round(self.min_ms, 3),
+            "max_ms": round(self.max_ms, 3),
+            "p50_ms": round(self.p50_ms, 3),
+            "p95_ms": round(self.p95_ms, 3),
+            "p99_ms": round(self.p99_ms, 3)
+        }
+
+    def reset(self) -> None:
+        """Clear all samples"""
+        self._samples.clear()
+        self._cache_valid = False
+        self._sorted_cache = None
 
 
 def format_currency(value: float, symbol: str = "$") -> str:

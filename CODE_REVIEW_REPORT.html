@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyMangoBot - Comprehensive Code Review Report</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #0891b2;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: var(--gray-800);
+            background: var(--gray-50);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 3rem 2rem;
+            margin-bottom: 2rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header .subtitle {
+            font-size: 1.25rem;
+            opacity: 0.9;
+        }
+
+        header .meta {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        header .meta-item {
+            background: rgba(255,255,255,0.15);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .executive-summary {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .executive-summary h2 {
+            color: var(--gray-900);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .ratings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .rating-card {
+            background: var(--gray-50);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            border-left: 4px solid var(--gray-300);
+        }
+
+        .rating-card.excellent { border-left-color: var(--success); }
+        .rating-card.good { border-left-color: var(--info); }
+        .rating-card.needs-work { border-left-color: var(--warning); }
+        .rating-card.critical { border-left-color: var(--danger); }
+
+        .rating-card h4 {
+            font-size: 1rem;
+            color: var(--gray-700);
+            margin-bottom: 0.5rem;
+        }
+
+        .rating-card .stars {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .rating-card .issues {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .section {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            color: var(--gray-900);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section h2 .number {
+            background: var(--primary);
+            color: white;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .section h3 {
+            color: var(--gray-800);
+            margin: 1.5rem 0 1rem;
+            font-size: 1.1rem;
+        }
+
+        .strengths, .issues {
+            margin: 1rem 0;
+        }
+
+        .strengths h3 {
+            color: var(--success);
+        }
+
+        .issues h3 {
+            color: var(--danger);
+        }
+
+        .code-block {
+            background: var(--gray-900);
+            color: #e5e7eb;
+            padding: 1rem 1.25rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.875rem;
+            margin: 1rem 0;
+            line-height: 1.5;
+        }
+
+        .code-block .comment {
+            color: #6b7280;
+        }
+
+        .code-block .file-ref {
+            color: #60a5fa;
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .code-block .keyword {
+            color: #c084fc;
+        }
+
+        .code-block .string {
+            color: #86efac;
+        }
+
+        .code-block .function {
+            color: #fbbf24;
+        }
+
+        .recommendation {
+            background: #eff6ff;
+            border-left: 4px solid var(--primary);
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .recommendation strong {
+            color: var(--primary-dark);
+        }
+
+        .warning-box {
+            background: #fef3c7;
+            border-left: 4px solid var(--warning);
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .danger-box {
+            background: #fee2e2;
+            border-left: 4px solid var(--danger);
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .success-box {
+            background: #dcfce7;
+            border-left: 4px solid var(--success);
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        ul, ol {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin: 0.5rem 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        th {
+            background: var(--gray-100);
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+
+        tr:hover {
+            background: var(--gray-50);
+        }
+
+        .priority-critical {
+            background: var(--danger);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .priority-high {
+            background: var(--warning);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .priority-medium {
+            background: var(--info);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .priority-low {
+            background: var(--success);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .action-items {
+            margin-top: 2rem;
+        }
+
+        .action-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--gray-50);
+            border-radius: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .action-item .number {
+            background: var(--gray-700);
+            color: white;
+            min-width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .action-item.critical .number { background: var(--danger); }
+        .action-item.high .number { background: var(--warning); }
+        .action-item.medium .number { background: var(--info); }
+        .action-item.low .number { background: var(--success); }
+
+        .action-item .content {
+            flex: 1;
+        }
+
+        .action-item .title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .action-item .description {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .stat-card {
+            background: var(--gray-50);
+            padding: 1.25rem;
+            border-radius: 0.75rem;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-card .label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-top: 0.25rem;
+        }
+
+        .toc {
+            background: var(--gray-100);
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .toc h3 {
+            margin-bottom: 1rem;
+            color: var(--gray-700);
+        }
+
+        .toc ul {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 0.5rem;
+        }
+
+        .toc a {
+            color: var(--primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--gray-600);
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            header {
+                padding: 2rem 1rem;
+            }
+
+            header h1 {
+                font-size: 1.75rem;
+            }
+
+            .section {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>PolyMangoBot Code Review</h1>
+            <p class="subtitle">Comprehensive Security, Performance, and Quality Analysis</p>
+            <div class="meta">
+                <span class="meta-item">Date: January 30, 2026</span>
+                <span class="meta-item">Version: 4.0.0</span>
+                <span class="meta-item">Files Analyzed: 37+</span>
+                <span class="meta-item">Lines of Code: ~25,000</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Table of Contents -->
+        <nav class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#executive-summary">Executive Summary</a></li>
+                <li><a href="#code-quality">1. Code Quality & Best Practices</a></li>
+                <li><a href="#performance">2. Performance & Efficiency</a></li>
+                <li><a href="#error-handling">3. Error Handling & Robustness</a></li>
+                <li><a href="#security">4. Security Analysis</a></li>
+                <li><a href="#testing">5. Testing & Documentation</a></li>
+                <li><a href="#dependencies">6. Dependencies & Configuration</a></li>
+                <li><a href="#scalability">7. Scalability & Maintainability</a></li>
+                <li><a href="#action-items">Priority Action Items</a></li>
+            </ul>
+        </nav>
+
+        <!-- Executive Summary -->
+        <section id="executive-summary" class="executive-summary">
+            <h2>Executive Summary</h2>
+            <p>PolyMangoBot is a sophisticated cryptocurrency arbitrage trading system designed to detect and execute profitable price discrepancies across multiple trading venues. The codebase demonstrates <strong>professional-grade architecture</strong> with strong fundamentals in async programming and modular design.</p>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="value">37+</div>
+                    <div class="label">Python Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">~25K</div>
+                    <div class="label">Lines of Code</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">16</div>
+                    <div class="label">Doc Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">5/5</div>
+                    <div class="label">Tests Passing</div>
+                </div>
+            </div>
+
+            <h3>Overall Ratings</h3>
+            <div class="ratings-grid">
+                <div class="rating-card good">
+                    <h4>Code Quality</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+                    <div class="issues">Minor duplication, some long functions</div>
+                </div>
+                <div class="rating-card good">
+                    <h4>Performance</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+                    <div class="issues">Good async patterns, memory concerns</div>
+                </div>
+                <div class="rating-card good">
+                    <h4>Error Handling</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+                    <div class="issues">Comprehensive exceptions, some gaps</div>
+                </div>
+                <div class="rating-card critical">
+                    <h4>Security</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9734;&#9734;</div>
+                    <div class="issues">Critical: secrets handling needs work</div>
+                </div>
+                <div class="rating-card needs-work">
+                    <h4>Testing</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9734;&#9734;</div>
+                    <div class="issues">Limited coverage, no unit tests</div>
+                </div>
+                <div class="rating-card excellent">
+                    <h4>Documentation</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                    <div class="issues">Excellent, comprehensive</div>
+                </div>
+                <div class="rating-card good">
+                    <h4>Scalability</h4>
+                    <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+                    <div class="issues">Modular design, some coupling</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 1: Code Quality -->
+        <section id="code-quality" class="section">
+            <h2><span class="number">1</span> Code Quality & Best Practices</h2>
+
+            <div class="strengths">
+                <h3>&#10004; Strengths</h3>
+
+                <p><strong>Well-structured dataclasses and type hints:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># config.py:54-63</span>
+<span class="keyword">@dataclass</span>(frozen=<span class="keyword">True</span>)
+<span class="keyword">class</span> <span class="function">RiskConfig</span>:
+    max_position_size: <span class="function">float</span> = 1000.0
+    max_daily_loss: <span class="function">float</span> = 5000.0
+    min_profit_margin_percent: <span class="function">float</span> = 0.3
+
+    <span class="keyword">def</span> <span class="function">__post_init__</span>(self):
+        <span class="keyword">if</span> self.max_position_size <= 0:
+            <span class="keyword">raise</span> ValueError(<span class="string">"max_position_size must be positive"</span>)
+                </div>
+
+                <p><strong>Clean async patterns with parallel execution:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># api_connectors.py:387-414</span>
+<span class="keyword">async def</span> <span class="function">fetch_all_prices_parallel</span>(self, symbols: List[str]) -> Dict:
+    tasks = {}
+    <span class="keyword">for</span> symbol <span class="keyword">in</span> symbols:
+        tasks[symbol] = asyncio.gather(
+            self.polymarket.get_order_book(symbol),
+            self.exchange.get_ticker(symbol),
+            return_exceptions=<span class="keyword">True</span>
+        )
+    <span class="comment"># Execute all in parallel - much faster than sequential</span>
+    all_results = <span class="keyword">await</span> asyncio.gather(*tasks.values())
+                </div>
+
+                <p><strong>Proper decorator patterns with exponential backoff:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># utils.py:66-120</span>
+<span class="keyword">def</span> <span class="function">retry_async</span>(max_attempts=3, base_delay=1.0, max_delay=30.0, ...):
+    <span class="keyword">def</span> <span class="function">decorator</span>(func):
+        <span class="keyword">@functools.wraps</span>(func)
+        <span class="keyword">async def</span> <span class="function">wrapper</span>(*args, **kwargs):
+            <span class="keyword">for</span> attempt <span class="keyword">in</span> range(max_attempts):
+                <span class="keyword">try</span>:
+                    <span class="keyword">return await</span> func(*args, **kwargs)
+                <span class="keyword">except</span> retryable_exceptions <span class="keyword">as</span> e:
+                    delay = calculate_backoff_delay(attempt, base_delay, max_delay)
+                    <span class="keyword">await</span> asyncio.sleep(delay)
+            <span class="keyword">raise</span> last_exception
+                </div>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Issues</h3>
+
+                <p><strong>1. Long functions needing decomposition:</strong></p>
+                <div class="warning-box">
+                    <code>main_v4.py:619-760</code> - <code>_fetch_market_data()</code> is 140+ lines with nested parsing logic for multiple venue formats.
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Extract parsing logic into separate methods per venue (e.g., <code>_parse_kraken_response()</code>, <code>_parse_polymarket_response()</code>)
+                </div>
+
+                <p><strong>2. Duplicated latency tracking code:</strong></p>
+                <div class="warning-box">
+                    <code>main_v4.py:87-141</code> (LatencyStats) and <code>utils.py:330-372</code> (TimingStats) are nearly identical implementations.
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Consolidate into a single utility class in <code>utils.py</code>
+                </div>
+
+                <p><strong>3. Magic numbers scattered throughout:</strong></p>
+                <div class="code-block">
+<span class="comment"># main_v4.py:329 - What does 0.95 mean?</span>
+buy_filled = buy_quantity * 0.95
+
+<span class="comment"># kelly_position_sizer.py:233 - Why 10%?</span>
+max_position = self.capital * 0.10
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Define as named constants: <code>EXPECTED_FILL_RATE = 0.95</code>, <code>MAX_POSITION_PCT = 0.10</code>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Performance -->
+        <section id="performance" class="section">
+            <h2><span class="number">2</span> Performance & Efficiency</h2>
+
+            <div class="strengths">
+                <h3>&#10004; Strengths</h3>
+
+                <p><strong>Excellent async parallelization for order execution:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># order_executor.py:267-271</span>
+<span class="comment"># Place BOTH orders SIMULTANEOUSLY - critical for arbitrage</span>
+results = <span class="keyword">await</span> asyncio.gather(
+    self._place_order_with_protection(buy_venue, buy_order),
+    self._place_order_with_protection(sell_venue, sell_order),
+    return_exceptions=<span class="keyword">True</span>
+)
+                </div>
+
+                <p><strong>Smart bounded data structures prevent memory leaks:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># websocket_manager.py:436</span>
+<span class="comment"># Use deque with maxlen for automatic memory management</span>
+self.price_history: Dict[str, deque] = {}
+
+<span class="keyword">def</span> <span class="function">_get_or_create_history</span>(self, symbol: str) -> deque:
+    <span class="keyword">if</span> symbol <span class="keyword">not in</span> self.price_history:
+        self.price_history[symbol] = deque(maxlen=self._max_history)
+    <span class="keyword">return</span> self.price_history[symbol]
+                </div>
+
+                <p><strong>Efficient token bucket rate limiting:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># utils.py:299-327</span>
+<span class="keyword">class</span> <span class="function">RateLimiter</span>:
+    <span class="keyword">async def</span> <span class="function">acquire</span>(self) -> <span class="keyword">None</span>:
+        <span class="keyword">async with</span> self._lock:
+            now = time.time()
+            elapsed = now - self.last_update
+            self.tokens = min(self.burst, self.tokens + elapsed * self.rate)
+            <span class="keyword">if</span> self.tokens < 1:
+                wait_time = (1 - self.tokens) / self.rate
+                <span class="keyword">await</span> asyncio.sleep(wait_time)
+                </div>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Issues</h3>
+
+                <p><strong>1. Potential memory issues - inefficient list slicing:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># main_v4.py:90-97</span>
+<span class="keyword">class</span> <span class="function">LatencyStats</span>:
+    samples: List[float] = field(default_factory=list)
+
+    <span class="keyword">def</span> <span class="function">record</span>(self, latency_ms: float):
+        self.samples.append(latency_ms)
+        <span class="keyword">if</span> len(self.samples) > self.max_samples:
+            <span class="comment"># Creates new list each time! O(n) memory allocation</span>
+            self.samples = self.samples[-self.max_samples:]
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Use <code>collections.deque(maxlen=max_samples)</code> for O(1) bounded operations
+                </div>
+
+                <p><strong>2. Inefficient percentile calculations - sorts 3 times:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># main_v4.py:124-140</span>
+<span class="keyword">@property</span>
+<span class="keyword">def</span> <span class="function">p50</span>(self) -> float:
+    sorted_samples = sorted(self.samples)  <span class="comment"># O(n log n)</span>
+
+<span class="keyword">@property</span>
+<span class="keyword">def</span> <span class="function">p95</span>(self) -> float:
+    sorted_samples = sorted(self.samples)  <span class="comment"># O(n log n) AGAIN</span>
+
+<span class="keyword">@property</span>
+<span class="keyword">def</span> <span class="function">p99</span>(self) -> float:
+    sorted_samples = sorted(self.samples)  <span class="comment"># O(n log n) A THIRD TIME</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Cache sorted array or use <code>statistics.quantiles()</code> for single-pass calculation
+                </div>
+
+                <p><strong>3. No connection pooling for HTTP clients:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># api_connectors.py:43-44</span>
+<span class="comment"># New session created per connect - no connection reuse</span>
+self.session = aiohttp.ClientSession(timeout=timeout)
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Use <code>aiohttp.TCPConnector(limit=100, limit_per_host=30)</code> for connection pooling
+                </div>
+
+                <p><strong>4. Synchronous logging in async hot path:</strong></p>
+                <div class="warning-box">
+                    <code>main_v4.py:187</code> - <code>logger.warning()</code> is blocking I/O in the latency tracking hot path, which could introduce latency spikes.
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Use async logging (e.g., <code>aiologger</code>) or a log queue for production
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Error Handling -->
+        <section id="error-handling" class="section">
+            <h2><span class="number">3</span> Error Handling & Robustness</h2>
+
+            <div class="strengths">
+                <h3>&#10004; Strengths</h3>
+
+                <p><strong>Comprehensive custom exception hierarchy:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># exceptions.py - Well-designed hierarchy</span>
+<span class="keyword">class</span> <span class="function">PolyMangoBotError</span>(Exception):
+    <span class="string">"""Base exception for all bot errors"""</span>
+
+<span class="keyword">class</span> <span class="function">APIError</span>(PolyMangoBotError): <span class="keyword">pass</span>
+<span class="keyword">class</span> <span class="function">APIConnectionError</span>(APIError): <span class="keyword">pass</span>
+<span class="keyword">class</span> <span class="function">APITimeoutError</span>(APIError): <span class="keyword">pass</span>
+<span class="keyword">class</span> <span class="function">APIRateLimitError</span>(APIError):
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, message, retry_after_seconds=<span class="keyword">None</span>):
+        self.retry_after_seconds = retry_after_seconds  <span class="comment"># Useful metadata!</span>
+
+<span class="keyword">class</span> <span class="function">AtomicExecutionError</span>(TradingError):
+    <span class="comment"># Includes rollback_status for recovery</span>
+                </div>
+
+                <p><strong>Circuit breaker pattern implementation:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># utils.py:157-256</span>
+<span class="keyword">class</span> <span class="function">CircuitBreaker</span>:
+    <span class="keyword">class</span> State:
+        CLOSED = <span class="string">"closed"</span>      <span class="comment"># Normal operation</span>
+        OPEN = <span class="string">"open"</span>          <span class="comment"># Service down, fail fast</span>
+        HALF_OPEN = <span class="string">"half_open"</span>  <span class="comment"># Testing recovery</span>
+
+    <span class="keyword">async def</span> <span class="function">call</span>(self, func, *args, **kwargs):
+        <span class="keyword">if</span> self.state == self.State.OPEN:
+            <span class="keyword">if</span> self._should_attempt_recovery():
+                self.state = self.State.HALF_OPEN
+            <span class="keyword">else</span>:
+                <span class="keyword">raise</span> APIError(<span class="string">"Circuit breaker is OPEN"</span>)
+                </div>
+
+                <p><strong>Atomic execution with rollback:</strong></p>
+                <div class="success-box">
+                    <code>order_executor.py:169-377</code> - Implements true atomicity where both orders succeed or both are cancelled, with automatic rollback on partial failure.
+                </div>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Issues</h3>
+
+                <p><strong>1. Silent exception swallowing in callbacks:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># websocket_manager.py:479-486</span>
+<span class="keyword">for</span> callback <span class="keyword">in</span> self.price_callbacks:
+    <span class="keyword">try</span>:
+        <span class="keyword">await</span> callback(event)
+    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:
+        logger.error(f<span class="string">"Callback error (non-fatal): {e}"</span>)
+        <span class="comment"># Silently continues - could mask important errors!</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Add error categorization, track callback failure rates, and alert on repeated failures
+                </div>
+
+                <p><strong>2. Missing validation in config loading:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># config.py:127-158</span>
+capital=<span class="function">float</span>(os.getenv(<span class="string">"TRADING_CAPITAL"</span>, <span class="string">"10000"</span>))
+<span class="comment"># What if TRADING_CAPITAL="invalid"? Crashes with ValueError</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Wrap in try/except with clear error messages: "Invalid TRADING_CAPITAL: must be a positive number"
+                </div>
+
+                <p><strong>3. Incomplete cleanup on shutdown:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># main_v4.py:1335-1360</span>
+<span class="keyword">async def</span> <span class="function">shutdown</span>(self):
+    self._running = <span class="keyword">False</span>
+    <span class="keyword">if</span> self.ws_manager:
+        <span class="keyword">await</span> self.ws_manager.disconnect_all()
+    <span class="comment"># What about in-flight API calls? Background tasks?</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Track all pending coroutines and cancel them with <code>asyncio.gather(*tasks, return_exceptions=True)</code>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Security -->
+        <section id="security" class="section">
+            <h2><span class="number">4</span> Security Analysis <span class="priority-critical">CRITICAL</span></h2>
+
+            <div class="danger-box">
+                <strong>&#9888; This section contains critical issues that must be addressed before production deployment.</strong>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Critical Security Issues</h3>
+
+                <p><strong>1. Secrets in environment variables without validation:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># config.py:131-137</span>
+api_key=os.getenv(<span class="string">"POLYMARKET_API_KEY"</span>, <span class="string">""</span>),
+api_secret=os.getenv(<span class="string">"POLYMARKET_API_SECRET"</span>, <span class="string">""</span>),
+<span class="comment"># Problems:
+# - No encryption at rest
+# - No validation that secrets are properly formatted
+# - Empty strings as defaults cause confusing behavior</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong>
+                    <div class="code-block">
+api_key = os.getenv(<span class="string">"POLYMARKET_API_KEY"</span>)
+<span class="keyword">if not</span> api_key:
+    <span class="keyword">raise</span> ConfigurationError(<span class="string">"POLYMARKET_API_KEY is required"</span>)
+<span class="keyword">if</span> len(api_key) < 20:  <span class="comment"># Basic format validation</span>
+    <span class="keyword">raise</span> ConfigurationError(<span class="string">"POLYMARKET_API_KEY appears invalid"</span>)
+                    </div>
+                </div>
+
+                <p><strong>2. API key exposure in debug logs:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># api_connectors.py:139</span>
+logger.debug(f<span class="string">"Placing Polymarket order: {order}"</span>)
+<span class="comment"># If order contains auth headers, they get logged!</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Create a <code>sanitize_for_logging()</code> function that masks sensitive fields
+                </div>
+
+                <p><strong>3. Missing HMAC signing for exchanges:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># api_connectors.py:266-268</span>
+<span class="keyword">async def</span> <span class="function">get_balance</span>(self) -> Dict:
+    logger.debug(f<span class="string">"Balance check on {self.exchange_name}"</span>)
+    <span class="comment"># Real implementation would use HMAC signatures</span>
+    <span class="keyword">return</span> {}  <span class="comment"># PLACEHOLDER - would fail in production!</span>
+                </div>
+                <div class="danger-box">
+                    <strong>Impact:</strong> Any authenticated API calls to Kraken/Coinbase will fail. Order placement requires proper request signing.
+                </div>
+
+                <p><strong>4. No TLS certificate pinning:</strong></p>
+                <div class="warning-box">
+                    Using default aiohttp SSL settings. While generally secure, production trading systems should implement certificate pinning to prevent MITM attacks.
+                </div>
+
+                <h3>Security Recommendations</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Issue</th>
+                            <th>Priority</th>
+                            <th>Effort</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Secrets validation</td>
+                            <td><span class="priority-critical">Critical</span></td>
+                            <td>Low</td>
+                            <td>Add validation in config.py</td>
+                        </tr>
+                        <tr>
+                            <td>HMAC signing</td>
+                            <td><span class="priority-critical">Critical</span></td>
+                            <td>Medium</td>
+                            <td>Implement per-exchange signing</td>
+                        </tr>
+                        <tr>
+                            <td>Log sanitization</td>
+                            <td><span class="priority-high">High</span></td>
+                            <td>Low</td>
+                            <td>Create sanitize utility</td>
+                        </tr>
+                        <tr>
+                            <td>Secrets manager</td>
+                            <td><span class="priority-medium">Medium</span></td>
+                            <td>Medium</td>
+                            <td>AWS Secrets Manager / Vault</td>
+                        </tr>
+                        <tr>
+                            <td>Certificate pinning</td>
+                            <td><span class="priority-low">Low</span></td>
+                            <td>Medium</td>
+                            <td>Custom SSL context</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Section 5: Testing -->
+        <section id="testing" class="section">
+            <h2><span class="number">5</span> Testing & Documentation</h2>
+
+            <div class="strengths">
+                <h3>&#10004; Documentation (Excellent)</h3>
+                <ul>
+                    <li><strong>16 comprehensive markdown files</strong> covering setup, features, architecture</li>
+                    <li><strong>Clear README</strong> with quick start instructions</li>
+                    <li><strong>Inline docstrings</strong> throughout the codebase</li>
+                    <li><strong>Architecture documentation</strong> in IMPLEMENTATION_SUMMARY.md</li>
+                </ul>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Testing (Needs Improvement)</h3>
+
+                <p><strong>Current State:</strong></p>
+                <ul>
+                    <li>Only 1 test file: <code>test_features_v2.py</code></li>
+                    <li>5 integration tests passing</li>
+                    <li>No unit tests</li>
+                    <li>No mocking of external services</li>
+                    <li>No property-based testing</li>
+                </ul>
+
+                <p><strong>Missing Test Coverage:</strong></p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Current Coverage</th>
+                            <th>Risk</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>API error paths</td>
+                            <td>None</td>
+                            <td><span class="priority-critical">Critical</span></td>
+                        </tr>
+                        <tr>
+                            <td>Circuit breaker transitions</td>
+                            <td>None</td>
+                            <td><span class="priority-high">High</span></td>
+                        </tr>
+                        <tr>
+                            <td>WebSocket reconnection</td>
+                            <td>None</td>
+                            <td><span class="priority-high">High</span></td>
+                        </tr>
+                        <tr>
+                            <td>Order execution race conditions</td>
+                            <td>None</td>
+                            <td><span class="priority-critical">Critical</span></td>
+                        </tr>
+                        <tr>
+                            <td>Kelly edge cases</td>
+                            <td>Partial</td>
+                            <td><span class="priority-medium">Medium</span></td>
+                        </tr>
+                        <tr>
+                            <td>Configuration validation</td>
+                            <td>None</td>
+                            <td><span class="priority-medium">Medium</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="recommendation">
+                    <strong>Recommendations:</strong>
+                    <ol>
+                        <li>Add <code>pytest</code> with <code>pytest-asyncio</code> for async testing</li>
+                        <li>Mock external APIs using <code>aioresponses</code></li>
+                        <li>Add property-based testing with <code>hypothesis</code> for Kelly calculations</li>
+                        <li>Target 80%+ code coverage</li>
+                        <li>Add CI/CD pipeline with test gates</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 6: Dependencies -->
+        <section id="dependencies" class="section">
+            <h2><span class="number">6</span> Dependencies & Configuration</h2>
+
+            <div class="strengths">
+                <h3>&#10004; Current Dependencies</h3>
+                <div class="code-block">
+<span class="comment"># requirements.txt - Modern, compatible versions</span>
+aiohttp==3.13.3        <span class="comment"># Async HTTP client</span>
+websockets==16.0       <span class="comment"># WebSocket support</span>
+numpy==2.4.1           <span class="comment"># Numerical computing</span>
+scikit-learn==1.8.0    <span class="comment"># ML models</span>
+lightgbm==4.6.0        <span class="comment"># Gradient boosting</span>
+orjson==3.11.6         <span class="comment"># Fast JSON parsing</span>
+python-dotenv==1.2.1   <span class="comment"># Environment variables</span>
+                </div>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Issues</h3>
+
+                <p><strong>1. Duplicate dotenv packages:</strong></p>
+                <div class="code-block">
+dotenv==0.9.9          <span class="comment"># Different package!</span>
+python-dotenv==1.2.1   <span class="comment"># This is the correct one</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Remove <code>dotenv</code>, keep only <code>python-dotenv</code>
+                </div>
+
+                <p><strong>2. Missing production dependencies:</strong></p>
+                <ul>
+                    <li><code>aiohttp[speedups]</code> - for faster performance with C extensions</li>
+                    <li><code>uvloop</code> - faster event loop (Linux)</li>
+                    <li><code>structlog</code> - structured logging for production</li>
+                    <li><code>sentry-sdk</code> - error monitoring</li>
+                </ul>
+
+                <p><strong>3. Missing dev dependencies:</strong></p>
+                <ul>
+                    <li><code>pytest</code>, <code>pytest-asyncio</code>, <code>pytest-cov</code></li>
+                    <li><code>black</code>, <code>mypy</code>, <code>ruff</code></li>
+                    <li><code>pre-commit</code> for automated quality checks</li>
+                </ul>
+
+                <p><strong>4. No lockfile:</strong></p>
+                <div class="warning-box">
+                    Using exact versions is good, but no <code>requirements.lock</code> or <code>poetry.lock</code> means transitive dependencies aren't pinned.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 7: Scalability -->
+        <section id="scalability" class="section">
+            <h2><span class="number">7</span> Scalability & Maintainability</h2>
+
+            <div class="strengths">
+                <h3>&#10004; Strengths</h3>
+
+                <p><strong>Modular architecture with clear layers:</strong></p>
+                <div class="code-block">
+<span class="comment"># Well-organized layer separation</span>
+Core Layer:        config.py, exceptions.py, utils.py
+API Layer:         api_connectors.py, websocket_manager.py
+Analysis Layer:    order_book_analyzer.py, fee_estimator.py, venue_analyzer.py
+ML Layer:          ml_opportunity_predictor.py, mm_tracker.py
+Execution Layer:   order_executor.py, risk_validator.py
+Orchestration:     main_v4.py (aggregates all)
+                </div>
+
+                <p><strong>Clean interfaces with dataclasses:</strong></p>
+                <div class="success-box">
+                    Data transfer between modules uses well-defined dataclasses like <code>PriceEvent</code>, <code>ExecutedTrade</code>, <code>KellyFraction</code>, etc.
+                </div>
+            </div>
+
+            <div class="issues">
+                <h3>&#10008; Issues</h3>
+
+                <p><strong>1. God class in main_v4.py:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># main_v4.py:317-502 - PolyMangoBotV4 has 15+ dependencies</span>
+<span class="keyword">class</span> <span class="function">PolyMangoBotV4</span>:
+    <span class="keyword">def</span> <span class="function">__init__</span>(self, ...):
+        self.api_manager = <span class="keyword">None</span>
+        self.api_fetcher = <span class="keyword">None</span>
+        self.enhanced_fetcher = <span class="keyword">None</span>
+        self.liquidity_scorer = <span class="keyword">None</span>
+        self.fee_estimator = <span class="keyword">None</span>
+        self.ws_manager = <span class="keyword">None</span>
+        self.order_executor = <span class="keyword">None</span>
+        self.venue_analyzer = <span class="keyword">None</span>
+        self.ml_predictor = <span class="keyword">None</span>
+        self.mm_tracker = <span class="keyword">None</span>
+        self.mm_exploitation = <span class="keyword">None</span>
+        self.kelly_sizer = <span class="keyword">None</span>
+        self.capital_manager = <span class="keyword">None</span>
+        self.regulatory_monitor = <span class="keyword">None</span>
+        <span class="comment"># Too many responsibilities!</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Extract into smaller orchestration components:
+                    <ul>
+                        <li><code>DataFetcher</code> - API + WebSocket management</li>
+                        <li><code>OpportunityAnalyzer</code> - Scoring + ML + MM tracking</li>
+                        <li><code>TradeManager</code> - Execution + Risk + Position sizing</li>
+                    </ul>
+                </div>
+
+                <p><strong>2. Tight coupling via direct imports:</strong></p>
+                <div class="code-block">
+                    <span class="file-ref"># risk_validator.py:10-11</span>
+<span class="keyword">from</span> fee_estimator <span class="keyword">import</span> CombinedCostEstimator, FeeEstimator
+<span class="keyword">from</span> kelly_position_sizer <span class="keyword">import</span> KellyPositionSizer
+<span class="comment"># Direct imports create tight coupling</span>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong> Use dependency injection - pass instances via constructor
+                </div>
+
+                <p><strong>3. No database abstraction:</strong></p>
+                <div class="warning-box">
+                    All state is in-memory. No persistence for trades, statistics, or historical data. Would need significant changes for production logging and analytics.
+                </div>
+            </div>
+        </section>
+
+        <!-- Action Items -->
+        <section id="action-items" class="section">
+            <h2>Priority Action Items</h2>
+
+            <h3 style="color: var(--danger); margin-top: 1rem;">Critical (Before Production)</h3>
+            <div class="action-items">
+                <div class="action-item critical">
+                    <div class="number">1</div>
+                    <div class="content">
+                        <div class="title">Secure secrets management</div>
+                        <div class="description">Add environment variable validation, fail fast on missing credentials, consider AWS Secrets Manager</div>
+                    </div>
+                </div>
+                <div class="action-item critical">
+                    <div class="number">2</div>
+                    <div class="content">
+                        <div class="title">Implement API authentication</div>
+                        <div class="description">Add HMAC signing for Kraken/Coinbase, proper OAuth for Polymarket</div>
+                    </div>
+                </div>
+                <div class="action-item critical">
+                    <div class="number">3</div>
+                    <div class="content">
+                        <div class="title">Add comprehensive test suite</div>
+                        <div class="description">pytest + pytest-asyncio, mock external APIs, target 80% coverage</div>
+                    </div>
+                </div>
+                <div class="action-item critical">
+                    <div class="number">4</div>
+                    <div class="content">
+                        <div class="title">Remove sensitive data from logs</div>
+                        <div class="description">Create sanitization utility, audit all logger.debug calls</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="color: var(--warning); margin-top: 2rem;">High Priority</h3>
+            <div class="action-items">
+                <div class="action-item high">
+                    <div class="number">5</div>
+                    <div class="content">
+                        <div class="title">Fix memory management</div>
+                        <div class="description">Replace lists with deques for bounded storage in LatencyStats</div>
+                    </div>
+                </div>
+                <div class="action-item high">
+                    <div class="number">6</div>
+                    <div class="content">
+                        <div class="title">Add connection pooling</div>
+                        <div class="description">Use aiohttp TCPConnector for HTTP connection reuse</div>
+                    </div>
+                </div>
+                <div class="action-item high">
+                    <div class="number">7</div>
+                    <div class="content">
+                        <div class="title">Implement proper cleanup</div>
+                        <div class="description">Cancel all pending tasks on shutdown, add graceful degradation</div>
+                    </div>
+                </div>
+                <div class="action-item high">
+                    <div class="number">8</div>
+                    <div class="content">
+                        <div class="title">Add health checks</div>
+                        <div class="description">Implement /health endpoint or CLI command for monitoring</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="color: var(--info); margin-top: 2rem;">Medium Priority</h3>
+            <div class="action-items">
+                <div class="action-item medium">
+                    <div class="number">9</div>
+                    <div class="content">
+                        <div class="title">Refactor PolyMangoBotV4</div>
+                        <div class="description">Break into smaller, focused components with single responsibilities</div>
+                    </div>
+                </div>
+                <div class="action-item medium">
+                    <div class="number">10</div>
+                    <div class="content">
+                        <div class="title">Consolidate duplicate code</div>
+                        <div class="description">Merge LatencyStats and TimingStats into single utility</div>
+                    </div>
+                </div>
+                <div class="action-item medium">
+                    <div class="number">11</div>
+                    <div class="content">
+                        <div class="title">Add async logging</div>
+                        <div class="description">Prevent blocking I/O in hot paths with aiologger or log queue</div>
+                    </div>
+                </div>
+                <div class="action-item medium">
+                    <div class="number">12</div>
+                    <div class="content">
+                        <div class="title">Define constants</div>
+                        <div class="description">Replace magic numbers with named constants throughout codebase</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="color: var(--success); margin-top: 2rem;">Low Priority (Improvements)</h3>
+            <div class="action-items">
+                <div class="action-item low">
+                    <div class="number">13</div>
+                    <div class="content">
+                        <div class="title">Add type checking</div>
+                        <div class="description">Run mypy in CI, fix type annotation gaps</div>
+                    </div>
+                </div>
+                <div class="action-item low">
+                    <div class="number">14</div>
+                    <div class="content">
+                        <div class="title">Add code formatting</div>
+                        <div class="description">Configure Black + Ruff for consistent style</div>
+                    </div>
+                </div>
+                <div class="action-item low">
+                    <div class="number">15</div>
+                    <div class="content">
+                        <div class="title">Add pre-commit hooks</div>
+                        <div class="description">Automated quality checks before commits</div>
+                    </div>
+                </div>
+                <div class="action-item low">
+                    <div class="number">16</div>
+                    <div class="content">
+                        <div class="title">Performance profiling</div>
+                        <div class="description">Identify bottlenecks under production load with py-spy</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Conclusion -->
+        <section class="section">
+            <h2>Conclusion</h2>
+            <p>PolyMangoBot demonstrates <strong>strong software engineering fundamentals</strong> with excellent async patterns, comprehensive error handling, and thorough documentation. The architecture is well-suited for the cryptocurrency trading domain.</p>
+
+            <h3>Summary</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Area</th>
+                        <th>Rating</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Code Quality</td>
+                        <td>4/5</td>
+                        <td>Good - minor improvements needed</td>
+                    </tr>
+                    <tr>
+                        <td>Performance</td>
+                        <td>4/5</td>
+                        <td>Good - memory optimization needed</td>
+                    </tr>
+                    <tr>
+                        <td>Error Handling</td>
+                        <td>4/5</td>
+                        <td>Good - shutdown cleanup needed</td>
+                    </tr>
+                    <tr>
+                        <td>Security</td>
+                        <td>3/5</td>
+                        <td><strong style="color: var(--danger);">Critical fixes required</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Testing</td>
+                        <td>3/5</td>
+                        <td>Needs comprehensive test suite</td>
+                    </tr>
+                    <tr>
+                        <td>Documentation</td>
+                        <td>5/5</td>
+                        <td>Excellent</td>
+                    </tr>
+                    <tr>
+                        <td>Scalability</td>
+                        <td>4/5</td>
+                        <td>Good - some refactoring needed</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="success-box" style="margin-top: 2rem;">
+                <strong>Bottom Line:</strong> With the critical security fixes and recommended improvements, this codebase would be well-positioned for production trading operations. The core architecture is sound and the async patterns are properly implemented.
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p>PolyMangoBot Code Review Report | Generated January 30, 2026</p>
+        <p>Review performed using static analysis and manual code inspection</p>
+    </footer>
+</body>
+</html>

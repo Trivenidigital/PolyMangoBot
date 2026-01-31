@@ -1,6 +1,8 @@
 """
 Configuration Management Module
-Centralized configuration with validation and type safety
+Centralized configuration with validation and type safety.
+
+Includes secure credential loading with validation.
 """
 
 from dataclasses import dataclass, field
@@ -9,6 +11,29 @@ from enum import Enum
 import os
 import logging
 from dotenv import load_dotenv
+
+from constants import (
+    DEFAULT_API_TIMEOUT,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_RETRY_BASE_DELAY,
+    DEFAULT_RATE_LIMIT_RPS,
+    DEFAULT_CONNECTION_LIMIT,
+    DEFAULT_CONNECTION_LIMIT_PER_HOST,
+    WS_CONNECT_TIMEOUT,
+    WS_HEARTBEAT_INTERVAL,
+    WS_RECONNECT_DELAY,
+    WS_MAX_RECONNECT_DELAY,
+    WS_MAX_RETRIES,
+    WS_MAX_PRICE_HISTORY_PER_SYMBOL,
+    DEFAULT_MAKER_FEE_PCT,
+    DEFAULT_TAKER_FEE_PCT,
+    DEFAULT_SLIPPAGE_PCT,
+    MIN_PROFIT_MARGIN_PCT,
+    MAX_SPREAD_PCT_SANITY,
+    MAX_POSITION_PCT_OF_CAPITAL,
+    MIN_TRADES_FOR_KELLY_CONFIDENCE,
+)
+from exceptions import ConfigurationError
 
 load_dotenv()
 
@@ -124,38 +149,100 @@ class BotConfig:
     dry_run: bool = True  # Safety: default to simulation mode
 
     @classmethod
-    def from_env(cls) -> "BotConfig":
-        """Load configuration from environment variables"""
+    def from_env(cls, validate_credentials: bool = False) -> "BotConfig":
+        """
+        Load configuration from environment variables.
+
+        Args:
+            validate_credentials: If True, raise ConfigurationError if credentials invalid
+
+        Returns:
+            BotConfig instance
+
+        Raises:
+            ConfigurationError: If validate_credentials=True and credentials are invalid
+        """
+        errors = []
+
+        # Parse numeric values with error handling
+        def parse_float(env_var: str, default: float, name: str) -> float:
+            value = os.getenv(env_var, str(default))
+            try:
+                parsed = float(value)
+                if parsed < 0:
+                    errors.append(f"{name} must be non-negative, got {parsed}")
+                    return default
+                return parsed
+            except ValueError:
+                errors.append(f"Invalid {name}: '{value}' is not a valid number")
+                return default
+
+        def parse_bool(env_var: str, default: bool) -> bool:
+            value = os.getenv(env_var, str(default).lower())
+            return value.lower() in ("true", "1", "yes", "on")
+
+        # Load API credentials
+        polymarket_key = os.getenv("POLYMARKET_API_KEY", "").strip()
+        polymarket_secret = os.getenv("POLYMARKET_API_SECRET", "").strip()
+        exchange_name = os.getenv("EXCHANGE_NAME", "kraken").strip().lower()
+        exchange_key = os.getenv(f"{exchange_name.upper()}_API_KEY", "").strip()
+        exchange_secret = os.getenv(f"{exchange_name.upper()}_API_SECRET", "").strip()
+
+        # Validate credentials if required
+        if validate_credentials:
+            if not polymarket_key or not polymarket_secret:
+                errors.append("Polymarket API credentials are required")
+            if not exchange_key or not exchange_secret:
+                errors.append(f"{exchange_name.capitalize()} API credentials are required")
+
+        # Parse kelly mode with validation
+        kelly_mode = os.getenv("KELLY_MODE", "HALF_KELLY").upper()
+        if kelly_mode not in ["FULL_KELLY", "HALF_KELLY", "QUARTER_KELLY"]:
+            errors.append(f"Invalid KELLY_MODE: {kelly_mode}")
+            kelly_mode = "HALF_KELLY"
+
+        # Parse log level with validation
+        log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+        try:
+            log_level = LogLevel[log_level_str]
+        except KeyError:
+            errors.append(f"Invalid LOG_LEVEL: {log_level_str}")
+            log_level = LogLevel.INFO
+
+        # Raise if there are errors and validation is required
+        if errors and validate_credentials:
+            raise ConfigurationError(f"Configuration errors: {'; '.join(errors)}")
+
         return cls(
             polymarket=PolymarketConfig(
-                api_key=os.getenv("POLYMARKET_API_KEY", ""),
-                api_secret=os.getenv("POLYMARKET_API_SECRET", ""),
+                api_key=polymarket_key,
+                api_secret=polymarket_secret,
             ),
             exchange=ExchangeConfig(
-                exchange_name=os.getenv("EXCHANGE_NAME", "kraken"),
-                api_key=os.getenv("KRAKEN_API_KEY", ""),
-                api_secret=os.getenv("KRAKEN_API_SECRET", ""),
+                exchange_name=exchange_name,
+                api_key=exchange_key,
+                api_secret=exchange_secret,
             ),
             risk=RiskConfig(
-                max_position_size=float(os.getenv("MAX_POSITION_SIZE", "1000")),
-                max_daily_loss=float(os.getenv("MAX_DAILY_LOSS", "5000")),
-                min_profit_margin_percent=float(os.getenv("MIN_PROFIT_MARGIN", "0.3")),
+                max_position_size=parse_float("MAX_POSITION_SIZE", 1000.0, "MAX_POSITION_SIZE"),
+                max_daily_loss=parse_float("MAX_DAILY_LOSS", 5000.0, "MAX_DAILY_LOSS"),
+                min_profit_margin_percent=parse_float("MIN_PROFIT_MARGIN", MIN_PROFIT_MARGIN_PCT, "MIN_PROFIT_MARGIN"),
             ),
             kelly=KellyConfig(
-                enabled=os.getenv("KELLY_ENABLED", "true").lower() == "true",
-                capital=float(os.getenv("TRADING_CAPITAL", "10000")),
-                mode=os.getenv("KELLY_MODE", "HALF_KELLY"),
+                enabled=parse_bool("KELLY_ENABLED", True),
+                capital=parse_float("TRADING_CAPITAL", 10000.0, "TRADING_CAPITAL"),
+                mode=kelly_mode,
             ),
             websocket=WebSocketConfig(
-                enabled=os.getenv("WEBSOCKET_ENABLED", "true").lower() == "true",
+                enabled=parse_bool("WEBSOCKET_ENABLED", True),
             ),
             logging=LoggingConfig(
-                level=LogLevel[os.getenv("LOG_LEVEL", "INFO").upper()],
+                level=log_level,
                 file_path=os.getenv("LOG_FILE"),
             ),
-            scan_interval_seconds=float(os.getenv("SCAN_INTERVAL", "5")),
-            min_spread_percent=float(os.getenv("MIN_SPREAD_PERCENT", "0.3")),
-            dry_run=os.getenv("DRY_RUN", "true").lower() == "true",
+            scan_interval_seconds=parse_float("SCAN_INTERVAL", 5.0, "SCAN_INTERVAL"),
+            min_spread_percent=parse_float("MIN_SPREAD_PERCENT", 0.3, "MIN_SPREAD_PERCENT"),
+            dry_run=parse_bool("DRY_RUN", True),
         )
 
     def validate(self) -> List[str]:
