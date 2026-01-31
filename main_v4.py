@@ -1,0 +1,974 @@
+"""
+PolyMangoBot v4.0 - Enterprise Arbitrage Bot
+=============================================
+
+Comprehensive arbitrage trading system with advanced features:
+- High-performance parallel API fetching
+- Sophisticated liquidity-weighted scoring
+- Dynamic fee and slippage estimation
+- Enterprise WebSocket management
+- Atomic order execution with rollback
+- Advanced venue lead-lag detection
+- Ensemble ML opportunity prediction
+- Market maker tracking and pattern recognition
+- Kelly-based position sizing with drawdown protection
+- Full regulatory monitoring and compliance
+
+Usage:
+    python main_v4.py [--dry-run] [--debug] [--config CONFIG_FILE]
+
+Author: PolyMango Team
+Version: 4.0.0
+"""
+
+import asyncio
+import argparse
+import signal
+import sys
+import logging
+import time
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from contextlib import contextmanager
+from collections import defaultdict
+import json
+
+# Core modules
+from config import BotConfig, RiskConfig, get_config
+from api_connectors import APIManager
+from exceptions import TradingError, APIError
+
+# Advanced modules
+from advanced_api_fetcher import ParallelAPIFetcher
+from advanced_liquidity_scorer import AdvancedLiquidityScorer, ScoredOpportunity
+from advanced_fee_estimator import AdvancedFeeEstimator
+from advanced_websocket_manager import AdvancedWebSocketManager, WebSocketConfig
+from advanced_order_executor import AdvancedOrderExecutor, AtomicTradeExecution
+from advanced_venue_analyzer import AdvancedVenueAnalyzer
+from advanced_ml_predictor import AdvancedMLPredictor, PredictionResult
+from advanced_mm_tracker import AdvancedMMTracker
+from advanced_kelly_sizer import AdvancedKellySizer
+from regulatory_monitor import RegulatoryMonitor
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(name)-30s | %(levelname)-8s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger("PolyMangoBot.v4")
+
+
+# =============================================================================
+# LATENCY MONITORING
+# =============================================================================
+
+@dataclass
+class LatencyStats:
+    """Statistics for a single latency component"""
+    samples: List[float] = field(default_factory=list)
+    max_samples: int = 1000
+
+    def record(self, latency_ms: float):
+        """Record a latency sample"""
+        self.samples.append(latency_ms)
+        if len(self.samples) > self.max_samples:
+            self.samples = self.samples[-self.max_samples:]
+
+    @property
+    def count(self) -> int:
+        return len(self.samples)
+
+    @property
+    def mean(self) -> float:
+        return sum(self.samples) / len(self.samples) if self.samples else 0
+
+    @property
+    def min(self) -> float:
+        return min(self.samples) if self.samples else 0
+
+    @property
+    def max(self) -> float:
+        return max(self.samples) if self.samples else 0
+
+    @property
+    def p50(self) -> float:
+        """50th percentile (median)"""
+        if not self.samples:
+            return 0
+        sorted_samples = sorted(self.samples)
+        idx = len(sorted_samples) // 2
+        return sorted_samples[idx]
+
+    @property
+    def p95(self) -> float:
+        """95th percentile"""
+        if not self.samples:
+            return 0
+        sorted_samples = sorted(self.samples)
+        idx = int(len(sorted_samples) * 0.95)
+        return sorted_samples[min(idx, len(sorted_samples) - 1)]
+
+    @property
+    def p99(self) -> float:
+        """99th percentile"""
+        if not self.samples:
+            return 0
+        sorted_samples = sorted(self.samples)
+        idx = int(len(sorted_samples) * 0.99)
+        return sorted_samples[min(idx, len(sorted_samples) - 1)]
+
+    def to_dict(self) -> Dict:
+        return {
+            "count": self.count,
+            "mean_ms": round(self.mean, 3),
+            "min_ms": round(self.min, 3),
+            "max_ms": round(self.max, 3),
+            "p50_ms": round(self.p50, 3),
+            "p95_ms": round(self.p95, 3),
+            "p99_ms": round(self.p99, 3)
+        }
+
+
+class LatencyMonitor:
+    """
+    Centralized latency monitoring for all bot components.
+
+    Usage:
+        with latency_monitor.track("fetch_market_data"):
+            data = await fetch_data()
+    """
+
+    def __init__(self):
+        self._stats: Dict[str, LatencyStats] = defaultdict(LatencyStats)
+        self._iteration_times: List[float] = []
+        self._slow_threshold_ms: float = 100.0  # Warn if component > 100ms
+
+    @contextmanager
+    def track(self, component: str):
+        """
+        Context manager to track latency of a component.
+
+        Args:
+            component: Name of the component being tracked
+        """
+        start = time.perf_counter_ns()
+        try:
+            yield
+        finally:
+            elapsed_ns = time.perf_counter_ns() - start
+            elapsed_ms = elapsed_ns / 1_000_000
+
+            # Record the latency
+            self._stats[component].record(elapsed_ms)
+
+            # Log at debug level
+            logger.debug(f"[LATENCY] {component}: {elapsed_ms:.3f}ms")
+
+            # Warn if slow
+            if elapsed_ms > self._slow_threshold_ms:
+                logger.warning(f"[SLOW] {component}: {elapsed_ms:.1f}ms (threshold: {self._slow_threshold_ms}ms)")
+
+    def record_iteration(self, elapsed_ms: float):
+        """Record total iteration time"""
+        self._iteration_times.append(elapsed_ms)
+        if len(self._iteration_times) > 1000:
+            self._iteration_times = self._iteration_times[-1000:]
+
+    def get_stats(self, component: str) -> Dict:
+        """Get stats for a specific component"""
+        if component in self._stats:
+            return self._stats[component].to_dict()
+        return {}
+
+    def get_all_stats(self) -> Dict:
+        """Get stats for all components"""
+        return {
+            component: stats.to_dict()
+            for component, stats in self._stats.items()
+        }
+
+    def get_summary(self) -> str:
+        """Get a formatted summary of all latencies"""
+        lines = ["=" * 70, "LATENCY SUMMARY", "=" * 70]
+
+        # Sort by p95 (slowest first)
+        sorted_components = sorted(
+            self._stats.items(),
+            key=lambda x: x[1].p95,
+            reverse=True
+        )
+
+        for component, stats in sorted_components:
+            if stats.count > 0:
+                lines.append(
+                    f"  {component:30s} | "
+                    f"p50: {stats.p50:7.2f}ms | "
+                    f"p95: {stats.p95:7.2f}ms | "
+                    f"p99: {stats.p99:7.2f}ms | "
+                    f"n={stats.count}"
+                )
+
+        # Total iteration time
+        if self._iteration_times:
+            avg_iter = sum(self._iteration_times) / len(self._iteration_times)
+            max_iter = max(self._iteration_times)
+            lines.append("-" * 70)
+            lines.append(f"  {'TOTAL_ITERATION':30s} | avg: {avg_iter:7.2f}ms | max: {max_iter:7.2f}ms")
+
+        lines.append("=" * 70)
+        return "\n".join(lines)
+
+    def reset(self):
+        """Reset all statistics"""
+        self._stats.clear()
+        self._iteration_times.clear()
+
+
+# Global latency monitor instance
+latency_monitor = LatencyMonitor()
+
+
+@contextmanager
+def latency_tracker(component: str):
+    """
+    Convenience context manager for latency tracking.
+
+    This is a simple wrapper around the global latency_monitor.
+
+    Args:
+        component: Name of the component/operation being tracked
+
+    Usage:
+        with latency_tracker("fetch_market_data"):
+            data = await fetch_data()
+    """
+    start = time.perf_counter_ns()
+    try:
+        yield
+    finally:
+        elapsed_ns = time.perf_counter_ns() - start
+        elapsed_ms = elapsed_ns / 1_000_000
+        logger.debug(f"[LATENCY] {component}: {elapsed_ms:.3f}ms")
+        latency_monitor._stats[component].record(elapsed_ms)
+
+
+@dataclass
+class BotStats:
+    """Bot performance statistics"""
+    start_time: float = 0.0
+    opportunities_found: int = 0
+    opportunities_executed: int = 0
+    opportunities_skipped: int = 0
+    total_profit: float = 0.0
+    total_fees: float = 0.0
+    successful_trades: int = 0
+    failed_trades: int = 0
+    compliance_violations: int = 0
+
+    @property
+    def success_rate(self) -> float:
+        total = self.successful_trades + self.failed_trades
+        return self.successful_trades / total * 100 if total > 0 else 0
+
+    @property
+    def uptime_hours(self) -> float:
+        if self.start_time == 0:
+            return 0
+        return (datetime.now().timestamp() - self.start_time) / 3600
+
+    def to_dict(self) -> Dict:
+        return {
+            "uptime_hours": round(self.uptime_hours, 2),
+            "opportunities_found": self.opportunities_found,
+            "opportunities_executed": self.opportunities_executed,
+            "opportunities_skipped": self.opportunities_skipped,
+            "total_profit": round(self.total_profit, 2),
+            "total_fees": round(self.total_fees, 2),
+            "net_profit": round(self.total_profit - self.total_fees, 2),
+            "successful_trades": self.successful_trades,
+            "failed_trades": self.failed_trades,
+            "success_rate": round(self.success_rate, 1),
+            "compliance_violations": self.compliance_violations
+        }
+
+
+class PolyMangoBotV4:
+    """
+    PolyMangoBot v4.0 - Enterprise Arbitrage Trading System
+
+    Features:
+    - Multi-venue arbitrage detection
+    - Advanced opportunity scoring
+    - ML-based prediction
+    - Sophisticated risk management
+    - Full compliance monitoring
+    """
+
+    def __init__(
+        self,
+        config: Optional[BotConfig] = None,
+        dry_run: bool = False,
+        debug: bool = False
+    ):
+        self.config = config or BotConfig()
+        self.dry_run = dry_run
+        self.debug = debug
+
+        # Set logging level
+        if debug:
+            logging.getLogger().setLevel(logging.DEBUG)
+
+        # Initialize components
+        self.api_manager: Optional[APIManager] = None
+        self.api_fetcher: Optional[ParallelAPIFetcher] = None
+        self.liquidity_scorer: Optional[AdvancedLiquidityScorer] = None
+        self.fee_estimator: Optional[AdvancedFeeEstimator] = None
+        self.ws_manager: Optional[AdvancedWebSocketManager] = None
+        self.order_executor: Optional[AdvancedOrderExecutor] = None
+        self.venue_analyzer: Optional[AdvancedVenueAnalyzer] = None
+        self.ml_predictor: Optional[AdvancedMLPredictor] = None
+        self.mm_tracker: Optional[AdvancedMMTracker] = None
+        self.kelly_sizer: Optional[AdvancedKellySizer] = None
+        self.regulatory_monitor: Optional[RegulatoryMonitor] = None
+
+        # State
+        self._running = False
+        self._paused = False
+        self.stats = BotStats()
+
+        # Market data cache
+        self._orderbooks: Dict[str, Dict] = {}
+        self._prices: Dict[str, float] = {}
+        self._last_update: Dict[str, float] = {}
+
+    async def initialize(self):
+        """Initialize all components"""
+        logger.info("=" * 60)
+        logger.info("PolyMangoBot v4.0 - Enterprise Arbitrage System")
+        logger.info("=" * 60)
+        logger.info(f"Mode: {'DRY RUN' if self.dry_run else 'LIVE TRADING'}")
+        logger.info(f"Debug: {'ENABLED' if self.debug else 'DISABLED'}")
+        logger.info("=" * 60)
+
+        try:
+            # Initialize API Manager
+            logger.info("Initializing API connections...")
+            self.api_manager = APIManager()
+            await self.api_manager.connect_all()
+
+            # Initialize parallel fetcher
+            logger.info("Initializing parallel API fetcher...")
+            self.api_fetcher = ParallelAPIFetcher()
+
+            # Initialize liquidity scorer
+            logger.info("Initializing liquidity scorer...")
+            self.liquidity_scorer = AdvancedLiquidityScorer()
+
+            # Initialize fee estimator
+            logger.info("Initializing fee estimator...")
+            self.fee_estimator = AdvancedFeeEstimator()
+
+            # Initialize WebSocket manager
+            logger.info("Initializing WebSocket manager...")
+            self.ws_manager = AdvancedWebSocketManager()
+            self._setup_websockets()
+
+            # Initialize order executor
+            logger.info("Initializing order executor...")
+            self.order_executor = AdvancedOrderExecutor(
+                self.api_manager,
+                max_concurrent_executions=1
+            )
+
+            # Initialize venue analyzer
+            logger.info("Initializing venue analyzer...")
+            self.venue_analyzer = AdvancedVenueAnalyzer()
+
+            # Initialize ML predictor
+            logger.info("Initializing ML predictor...")
+            self.ml_predictor = AdvancedMLPredictor()
+
+            # Initialize MM tracker
+            logger.info("Initializing market maker tracker...")
+            self.mm_tracker = AdvancedMMTracker()
+
+            # Initialize Kelly sizer
+            logger.info("Initializing position sizer...")
+            self.kelly_sizer = AdvancedKellySizer()
+
+            # Initialize regulatory monitor
+            logger.info("Initializing regulatory monitor...")
+            self.regulatory_monitor = RegulatoryMonitor()
+
+            logger.info("All components initialized successfully!")
+            return True
+
+        except Exception as e:
+            logger.error(f"Initialization failed: {e}")
+            return False
+
+    def _setup_websockets(self):
+        """Setup WebSocket streams"""
+        # Add Kraken stream
+        self.ws_manager.add_stream(
+            "kraken",
+            "wss://ws.kraken.com",
+            heartbeat_interval=30.0,
+            reconnect_enabled=True
+        )
+
+        # Add message handler
+        def handle_ws_message(stream_name: str, message: Dict):
+            self._process_ws_message(stream_name, message)
+
+        self.ws_manager.add_global_handler(handle_ws_message)
+
+    def _process_ws_message(self, stream_name: str, message: Dict):
+        """Process incoming WebSocket message"""
+        # Update market data based on message type
+        if isinstance(message, dict):
+            # Handle different message formats
+            if "event" in message:
+                # Kraken format
+                pass
+            elif "channel" in message:
+                # Polymarket format
+                pass
+
+    async def connect_websockets(self):
+        """Connect WebSocket streams"""
+        logger.info("Connecting WebSocket streams...")
+        await self.ws_manager.connect_all()
+
+        # Subscribe to channels
+        for stream_name, stream in self.ws_manager._streams.items():
+            if stream_name == "kraken":
+                await stream.subscribe({
+                    "event": "subscribe",
+                    "pair": ["XBT/USD", "ETH/USD"],
+                    "subscription": {"name": "ticker"}
+                })
+
+    async def run(self):
+        """Main bot loop"""
+        self._running = True
+        self.stats.start_time = datetime.now().timestamp()
+
+        logger.info("Starting main trading loop...")
+
+        try:
+            # Connect WebSockets
+            await self.connect_websockets()
+
+            # Main loop
+            iteration = 0
+            while self._running:
+                iteration += 1
+
+                if self._paused:
+                    await asyncio.sleep(1)
+                    continue
+
+                try:
+                    # Run one iteration
+                    await self._trading_iteration(iteration)
+
+                except Exception as e:
+                    logger.error(f"Error in iteration {iteration}: {e}")
+                    if self.debug:
+                        import traceback
+                        traceback.print_exc()
+
+                # Wait before next iteration
+                await asyncio.sleep(self.config.scan_interval_seconds)
+
+        except asyncio.CancelledError:
+            logger.info("Received shutdown signal")
+        finally:
+            await self.shutdown()
+
+    async def _trading_iteration(self, iteration: int):
+        """Single trading iteration with comprehensive latency tracking"""
+        iteration_start = time.perf_counter_ns()
+
+        # Log stats and latency summary periodically
+        if iteration % 10 == 0:
+            logger.info(f"Iteration {iteration} | Stats: {self.stats.to_dict()}")
+
+        # Log detailed latency summary every 100 iterations
+        if iteration % 100 == 0 and iteration > 0:
+            logger.info("\n" + latency_monitor.get_summary())
+
+        # Step 1: Fetch market data
+        with latency_tracker("fetch_market_data"):
+            market_data = await self._fetch_market_data()
+
+        if not market_data:
+            logger.debug("No market data available")
+            return
+
+        # Step 2: Detect opportunities
+        with latency_tracker("detect_opportunities"):
+            opportunities = await self._detect_opportunities(market_data)
+
+        if not opportunities:
+            return
+
+        self.stats.opportunities_found += len(opportunities)
+        logger.info(f"Found {len(opportunities)} potential opportunities")
+
+        # Step 3: Score and filter opportunities
+        with latency_tracker("score_opportunities"):
+            scored = await self._score_opportunities(opportunities, market_data)
+
+        # Step 4: Get ML predictions
+        with latency_tracker("ml_predictions"):
+            predictions = await self._get_predictions(scored)
+
+        # Step 5: Calculate position sizes
+        with latency_tracker("position_sizing"):
+            sized = await self._size_positions(predictions)
+
+        # Step 6: Compliance checks
+        with latency_tracker("compliance_check"):
+            compliant = await self._compliance_check(sized)
+
+        # Step 7: Execute trades
+        if compliant:
+            with latency_tracker("execute_trades"):
+                await self._execute_trades(compliant)
+
+        # Record and log total iteration time
+        iteration_elapsed_ns = time.perf_counter_ns() - iteration_start
+        iteration_elapsed_ms = iteration_elapsed_ns / 1_000_000
+        latency_monitor.record_iteration(iteration_elapsed_ms)
+
+        if iteration_elapsed_ms > 1000:
+            logger.warning(f"[SLOW ITERATION] {iteration_elapsed_ms:.0f}ms - consider optimization")
+        elif iteration_elapsed_ms > 500:
+            logger.info(f"[LATENCY] Total iteration: {iteration_elapsed_ms:.1f}ms")
+
+    async def _fetch_market_data(self) -> Dict:
+        """Fetch current market data from all venues with latency tracking"""
+        # Define markets to fetch
+        markets = self.config.markets if hasattr(self.config, 'markets') else ["BTC", "ETH"]
+        venues = ["polymarket", "kraken"]
+
+        # Build requests
+        with latency_tracker("fetch_build_requests"):
+            requests = []
+            for market in markets:
+                for venue in venues:
+                    requests.append({
+                        "market": market,
+                        "venue": venue,
+                        "type": "orderbook"
+                    })
+
+        # Fetch in parallel (simplified - would use api_fetcher in production)
+        market_data = {}
+
+        with latency_tracker("fetch_api_calls"):
+            for req in requests:
+                key = f"{req['venue']}_{req['market']}"
+                # Placeholder data
+                market_data[key] = {
+                    "market": req["market"],
+                    "venue": req["venue"],
+                    "bid": 40000 + (hash(key) % 1000),
+                    "ask": 40050 + (hash(key) % 1000),
+                    "bid_volume": 10,
+                    "ask_volume": 10,
+                    "timestamp": datetime.now().timestamp()
+                }
+
+        return market_data
+
+    async def _detect_opportunities(self, market_data: Dict) -> List[Dict]:
+        """Detect arbitrage opportunities"""
+        opportunities = []
+
+        # Group by market
+        by_market: Dict[str, List[Dict]] = {}
+        for key, data in market_data.items():
+            market = data["market"]
+            if market not in by_market:
+                by_market[market] = []
+            by_market[market].append(data)
+
+        # Find cross-venue opportunities
+        for market, venues in by_market.items():
+            if len(venues) < 2:
+                continue
+
+            for i, buy_venue in enumerate(venues):
+                for sell_venue in venues[i + 1:]:
+                    # Check buy_venue.ask < sell_venue.bid
+                    if buy_venue["ask"] < sell_venue["bid"]:
+                        spread = sell_venue["bid"] - buy_venue["ask"]
+                        opportunities.append({
+                            "id": f"opp_{market}_{buy_venue['venue']}_{sell_venue['venue']}",
+                            "market": market,
+                            "buy_venue": buy_venue["venue"],
+                            "buy_price": buy_venue["ask"],
+                            "buy_volume": buy_venue["ask_volume"],
+                            "sell_venue": sell_venue["venue"],
+                            "sell_price": sell_venue["bid"],
+                            "sell_volume": sell_venue["bid_volume"],
+                            "spread": spread,
+                            "spread_pct": spread / buy_venue["ask"] * 100
+                        })
+
+                    # Check reverse
+                    if sell_venue["ask"] < buy_venue["bid"]:
+                        spread = buy_venue["bid"] - sell_venue["ask"]
+                        opportunities.append({
+                            "id": f"opp_{market}_{sell_venue['venue']}_{buy_venue['venue']}",
+                            "market": market,
+                            "buy_venue": sell_venue["venue"],
+                            "buy_price": sell_venue["ask"],
+                            "buy_volume": sell_venue["ask_volume"],
+                            "sell_venue": buy_venue["venue"],
+                            "sell_price": buy_venue["bid"],
+                            "sell_volume": buy_venue["bid_volume"],
+                            "spread": spread,
+                            "spread_pct": spread / sell_venue["ask"] * 100
+                        })
+
+        return opportunities
+
+    async def _score_opportunities(
+        self,
+        opportunities: List[Dict],
+        market_data: Dict
+    ) -> List[ScoredOpportunity]:
+        """Score and rank opportunities"""
+        scored = []
+
+        for opp in opportunities:
+            try:
+                # Build order book data as list of (price, quantity) tuples
+                buy_data = market_data.get(f"{opp['buy_venue']}_{opp['market']}", {})
+                sell_data = market_data.get(f"{opp['sell_venue']}_{opp['market']}", {})
+
+                # Create synthetic order book data for scoring
+                buy_orderbook = [(opp['buy_price'], opp['buy_volume'])]
+                sell_orderbook = [(opp['sell_price'], opp['sell_volume'])]
+
+                # Use liquidity scorer with correct signature
+                score = self.liquidity_scorer.score_opportunity(
+                    market=opp['market'],
+                    buy_venue=opp['buy_venue'],
+                    buy_price=opp['buy_price'],
+                    buy_order_book=buy_orderbook,
+                    sell_venue=opp['sell_venue'],
+                    sell_price=opp['sell_price'],
+                    sell_order_book=sell_orderbook,
+                    target_quantity=min(opp['buy_volume'], opp['sell_volume'])
+                )
+
+                if score.overall_score > 0.5:  # Minimum score threshold
+                    scored.append(score)
+            except Exception as e:
+                logger.debug(f"Failed to score opportunity {opp.get('id')}: {e}")
+                continue
+
+        # Sort by score
+        scored.sort(key=lambda x: x.overall_score, reverse=True)
+
+        return scored[:10]  # Top 10
+
+    async def _get_predictions(
+        self,
+        opportunities: List[ScoredOpportunity]
+    ) -> List[Dict]:
+        """Get ML predictions for opportunities"""
+        results = []
+
+        for scored in opportunities:
+            # Build feature dict from ScoredOpportunity attributes
+            opp_dict = {
+                "id": scored.opportunity_id,
+                "buy_price": scored.buy_price,
+                "sell_price": scored.sell_price,
+                "buy_volume": scored.buy_quantity_available,
+                "sell_volume": scored.sell_quantity_available,
+                "spread_pct": scored.spread_percent,
+                "buy_venue": scored.buy_venue,
+                "sell_venue": scored.sell_venue,
+                "quantity": scored.recommended_size,
+                "gross_profit": scored.expected_profit,
+                "estimated_costs": scored.estimated_cost,
+                # Microstructure features for ML
+                "buy_obi": scored.buy_obi,
+                "sell_obi": scored.sell_obi,
+                "combined_toxicity": scored.combined_toxicity,
+                "entry_confidence": scored.entry_confidence,
+                "realistic_spread_pct": scored.realistic_spread_pct
+            }
+
+            prediction = await self.ml_predictor.predict(opp_dict)
+
+            results.append({
+                "scored": scored,
+                "prediction": prediction
+            })
+
+        # Filter by prediction
+        results = [
+            r for r in results
+            if r["prediction"].should_execute
+        ]
+
+        return results
+
+    async def _size_positions(self, opportunities: List[Dict]) -> List[Dict]:
+        """Calculate position sizes"""
+        sized = []
+
+        for opp in opportunities:
+            # Get Kelly recommendation
+            recommendation = self.kelly_sizer.calculate_position(
+                opportunity={
+                    "expected_profit": opp["scored"].expected_profit,
+                    "win_probability": opp["prediction"].probability,
+                    "loss_if_wrong": opp["scored"].expected_profit * 0.5
+                }
+            )
+
+            if recommendation.should_trade:
+                opp["position_size"] = recommendation.position_size
+                opp["kelly_fraction"] = recommendation.kelly_fraction
+                sized.append(opp)
+
+        return sized
+
+    async def _compliance_check(self, opportunities: List[Dict]) -> List[Dict]:
+        """Run compliance checks"""
+        compliant = []
+
+        for opp in opportunities:
+            order = {
+                "market": opp["scored"].opportunity_id.split("_")[1] if "_" in opp["scored"].opportunity_id else "BTC",
+                "venue": opp["scored"].buy_venue,
+                "side": "buy",
+                "quantity": opp["position_size"],
+                "price": opp["scored"].buy_price
+            }
+
+            allowed, violations = await self.regulatory_monitor.check_pre_trade(order)
+
+            if allowed:
+                compliant.append(opp)
+            else:
+                self.stats.compliance_violations += 1
+                self.stats.opportunities_skipped += 1
+                logger.warning(f"Compliance violation: {violations}")
+
+        return compliant
+
+    async def _execute_trades(self, opportunities: List[Dict]):
+        """Execute approved trades"""
+        for opp in opportunities[:1]:  # Execute one at a time
+            scored = opp["scored"]
+
+            logger.info(
+                f"Executing: {scored.opportunity_id} | "
+                f"Size: {opp['position_size']:.4f} | "
+                f"Expected: ${scored.expected_profit:.2f}"
+            )
+
+            # Execute atomic trade
+            execution = await self.order_executor.execute_atomic_trade(
+                market=scored.opportunity_id.split("_")[1] if "_" in scored.opportunity_id else "BTC",
+                buy_venue=scored.buy_venue,
+                buy_price=scored.buy_price,
+                buy_quantity=opp["position_size"],
+                sell_venue=scored.sell_venue,
+                sell_price=scored.sell_price,
+                sell_quantity=opp["position_size"],
+                dry_run=self.dry_run
+            )
+
+            # Record outcome
+            if execution.success:
+                self.stats.successful_trades += 1
+                self.stats.opportunities_executed += 1
+                self.stats.total_profit += execution.realized_profit
+                self.stats.total_fees += execution.total_fees
+
+                logger.info(
+                    f"Trade SUCCESS | Profit: ${execution.realized_profit:.2f} | "
+                    f"Fees: ${execution.total_fees:.2f}"
+                )
+
+                # Update ML model
+                self.ml_predictor.record_outcome(
+                    scored.opportunity_id,
+                    was_profitable=execution.realized_profit > 0,
+                    actual_profit=execution.realized_profit
+                )
+
+                # Update Kelly sizer
+                self.kelly_sizer.record_trade(
+                    profit_loss=execution.realized_profit,
+                    won=execution.realized_profit > 0
+                )
+
+            else:
+                self.stats.failed_trades += 1
+                self.stats.opportunities_skipped += 1
+
+                logger.warning(
+                    f"Trade FAILED | Reason: {execution.rollback_reason}"
+                )
+
+            # Post-trade compliance
+            await self.regulatory_monitor.check_post_trade({
+                "trade_id": execution.execution_id,
+                "market": scored.opportunity_id,
+                "venue": scored.buy_venue,
+                "side": "buy",
+                "quantity": opp["position_size"],
+                "price": scored.buy_price,
+                "timestamp": datetime.now().timestamp()
+            })
+
+    def pause(self):
+        """Pause trading"""
+        self._paused = True
+        logger.info("Trading PAUSED")
+
+    def resume(self):
+        """Resume trading"""
+        self._paused = False
+        logger.info("Trading RESUMED")
+
+    async def shutdown(self):
+        """Graceful shutdown"""
+        logger.info("Initiating shutdown...")
+
+        self._running = False
+
+        # Disconnect WebSockets
+        if self.ws_manager:
+            await self.ws_manager.disconnect_all()
+
+        # Wait for active trades
+        if self.order_executor:
+            await self.order_executor.wait_for_active_trades(timeout_seconds=30)
+
+        # Disconnect APIs
+        if self.api_manager:
+            await self.api_manager.disconnect_all()
+
+        # Generate final report
+        self._generate_shutdown_report()
+
+        logger.info("Shutdown complete")
+
+    def _generate_shutdown_report(self):
+        """Generate shutdown report with latency statistics"""
+        logger.info("=" * 60)
+        logger.info("SHUTDOWN REPORT")
+        logger.info("=" * 60)
+        logger.info(f"Runtime: {self.stats.uptime_hours:.2f} hours")
+        logger.info(f"Opportunities Found: {self.stats.opportunities_found}")
+        logger.info(f"Opportunities Executed: {self.stats.opportunities_executed}")
+        logger.info(f"Success Rate: {self.stats.success_rate:.1f}%")
+        logger.info(f"Total Profit: ${self.stats.total_profit:.2f}")
+        logger.info(f"Total Fees: ${self.stats.total_fees:.2f}")
+        logger.info(f"Net Profit: ${self.stats.total_profit - self.stats.total_fees:.2f}")
+        logger.info("=" * 60)
+
+        # Latency report
+        logger.info("\n" + latency_monitor.get_summary())
+
+        # Compliance report
+        if self.regulatory_monitor:
+            compliance = self.regulatory_monitor.get_compliance_status()
+            logger.info(f"Compliance Status: {compliance['overall_status']}")
+            logger.info(f"Compliance Violations: {self.stats.compliance_violations}")
+
+    def get_status(self) -> Dict:
+        """Get current bot status including latency metrics"""
+        status = {
+            "running": self._running,
+            "paused": self._paused,
+            "mode": "dry_run" if self.dry_run else "live",
+            "stats": self.stats.to_dict()
+        }
+
+        # Add component statuses
+        if self.ws_manager:
+            status["websockets"] = self.ws_manager.get_health_summary()
+
+        if self.order_executor:
+            status["execution"] = self.order_executor.get_execution_stats()
+
+        if self.regulatory_monitor:
+            status["compliance"] = self.regulatory_monitor.get_compliance_status()
+
+        if self.ml_predictor:
+            status["ml"] = self.ml_predictor.get_stats()
+
+        # Add latency metrics
+        status["latency"] = latency_monitor.get_all_stats()
+
+        return status
+
+
+async def main():
+    """Main entry point"""
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="PolyMangoBot v4.0")
+    parser.add_argument("--dry-run", action="store_true", help="Run in simulation mode")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--config", type=str, help="Config file path")
+    args = parser.parse_args()
+
+    # Load config
+    config = None
+    if args.config:
+        # Load from file if provided
+        import json
+        with open(args.config, 'r') as f:
+            config_data = json.load(f)
+        # For now, use default config - could parse config_data in production
+        config = get_config()
+    else:
+        config = get_config()
+
+    # Create bot
+    bot = PolyMangoBotV4(
+        config=config,
+        dry_run=args.dry_run,
+        debug=args.debug
+    )
+
+    # Setup signal handlers
+    loop = asyncio.get_event_loop()
+
+    def signal_handler():
+        logger.info("Received interrupt signal")
+        asyncio.create_task(bot.shutdown())
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, signal_handler)
+        except NotImplementedError:
+            # Windows doesn't support add_signal_handler
+            pass
+
+    # Initialize and run
+    if await bot.initialize():
+        await bot.run()
+    else:
+        logger.error("Failed to initialize bot")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
