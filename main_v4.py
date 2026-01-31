@@ -59,6 +59,11 @@ from mm_exploitation_strategies import (
     SpreadRegime,
     QuoteStuffingType
 )
+from capital_efficiency_manager import (
+    CapitalEfficiencyManager,
+    CompoundingMode,
+    PerformanceTier
+)
 
 # Setup logging
 logging.basicConfig(
@@ -341,6 +346,7 @@ class PolyMangoBotV4:
         self.mm_tracker: Optional[AdvancedMMTracker] = None
         self.mm_exploitation: Optional[MMExploitationEngine] = None
         self.kelly_sizer: Optional[AdvancedKellySizer] = None
+        self.capital_manager: Optional[CapitalEfficiencyManager] = None
         self.regulatory_monitor: Optional[RegulatoryMonitor] = None
 
         # State
@@ -411,6 +417,16 @@ class PolyMangoBotV4:
             # Initialize Kelly sizer
             logger.info("Initializing position sizer...")
             self.kelly_sizer = AdvancedKellySizer()
+
+            # Initialize capital efficiency manager
+            logger.info("Initializing capital efficiency manager...")
+            initial_capital = self.config.initial_capital if hasattr(self.config, 'initial_capital') else 10000.0
+            self.capital_manager = CapitalEfficiencyManager(
+                initial_capital=initial_capital,
+                reserve_pct=10.0,
+                compounding_mode=CompoundingMode.PARTIAL_REINVEST,
+                reinvestment_rate=0.7
+            )
 
             # Initialize regulatory monitor
             logger.info("Initializing regulatory monitor...")
@@ -756,7 +772,7 @@ class PolyMangoBotV4:
         return results
 
     async def _size_positions(self, opportunities: List[Dict]) -> List[Dict]:
-        """Calculate position sizes with MM exploitation adjustments"""
+        """Calculate position sizes with MM exploitation and capital efficiency adjustments"""
         sized = []
 
         for opp in opportunities:
@@ -782,15 +798,35 @@ class PolyMangoBotV4:
                 mm_multiplier = opp.get("mm_size_multiplier", 1.0)
                 adjusted_size = base_size * mm_multiplier
 
+                # Apply capital efficiency manager sizing (performance tier-based)
+                if self.capital_manager:
+                    cap_rec = self.capital_manager.get_position_recommendation(
+                        strategy_id="arbitrage",
+                        kelly_fraction=recommendation.kelly_fraction,
+                        opportunity_confidence=opp["prediction"].confidence
+                    )
+
+                    # Apply tier multiplier
+                    tier_multiplier = cap_rec.get("tier_multiplier", 1.0)
+                    adjusted_size *= tier_multiplier
+
+                    # Cap at tier max
+                    max_position = cap_rec.get("allocated_capital", 10000) * (cap_rec.get("max_position_pct", 10) / 100)
+                    adjusted_size = min(adjusted_size, max_position)
+
+                    opp["performance_tier"] = cap_rec.get("performance_tier", "standard")
+                    opp["tier_multiplier"] = tier_multiplier
+
                 opp["position_size"] = adjusted_size
                 opp["kelly_fraction"] = recommendation.kelly_fraction
                 opp["base_position_size"] = base_size
                 opp["mm_adjusted"] = mm_multiplier != 1.0
 
-                if opp["mm_adjusted"]:
+                if opp["mm_adjusted"] or opp.get("tier_multiplier", 1.0) != 1.0:
                     logger.info(
                         f"[POSITION SIZING] {opp['scored'].opportunity_id}: "
                         f"base={base_size:.4f}, mm_mult={mm_multiplier:.2f}, "
+                        f"tier={opp.get('performance_tier', 'standard')}, "
                         f"final={adjusted_size:.4f}"
                     )
 
@@ -869,6 +905,26 @@ class PolyMangoBotV4:
                     profit_loss=execution.realized_profit,
                     won=execution.realized_profit > 0
                 )
+
+                # Update capital efficiency manager
+                if self.capital_manager:
+                    trade_duration = 0.0  # Would calculate from execution times
+                    pnl_pct = (execution.realized_profit / opp["position_size"] * 100) if opp["position_size"] > 0 else 0
+
+                    self.capital_manager.record_trade(
+                        strategy_id="arbitrage",
+                        pnl=execution.realized_profit,
+                        pnl_pct=pnl_pct,
+                        win=execution.realized_profit > 0,
+                        duration_minutes=trade_duration,
+                        sharpe=0.0,  # Would calculate from recent trades
+                        volatility=0.0
+                    )
+
+                    # Log performance tier if changed
+                    tier = self.capital_manager.performance_sizer.current_tier
+                    if tier != PerformanceTier.STANDARD:
+                        logger.info(f"[CAPITAL] Performance tier: {tier.value}")
 
             else:
                 self.stats.failed_trades += 1
@@ -1162,6 +1218,28 @@ class PolyMangoBotV4:
             logger.info(f"Active Markets Tracked: {len(mm_stats.get('active_markets', []))}")
             logger.info(f"Total MM Analyses: {mm_stats.get('total_analyses', 0)}")
 
+        # Capital Efficiency report
+        if self.capital_manager:
+            logger.info("-" * 60)
+            logger.info("CAPITAL EFFICIENCY SUMMARY")
+            logger.info("-" * 60)
+            cap_stats = self.capital_manager.get_capital_stats()
+
+            # Compounding stats
+            comp = cap_stats.get("compounding", {})
+            logger.info(f"Initial Capital: ${comp.get('initial_capital', 0):.2f}")
+            logger.info(f"Current Capital: ${comp.get('current_capital', 0):.2f}")
+            logger.info(f"Total Growth: {comp.get('growth_pct', 0):.1f}%")
+            logger.info(f"CAGR: {comp.get('cagr', 0):.1f}%")
+            logger.info(f"Reinvested Profit: ${comp.get('reinvested_profit', 0):.2f}")
+            logger.info(f"Milestones Reached: {comp.get('milestones_reached', 0)}")
+
+            # Performance tier
+            perf = cap_stats.get("performance_sizing", {})
+            logger.info(f"Performance Tier: {perf.get('current_tier', 'standard')}")
+            logger.info(f"Tier Score: {perf.get('tier_score', 0):.1f}")
+            logger.info(f"Position Multiplier: {perf.get('position_multiplier', 1):.2f}x")
+
     def get_status(self) -> Dict:
         """Get current bot status including latency metrics"""
         status = {
@@ -1193,6 +1271,10 @@ class PolyMangoBotV4:
             status["mm_tracker"] = {
                 "profiles": self.mm_tracker.get_all_mm_profiles()
             }
+
+        # Add capital efficiency stats
+        if self.capital_manager:
+            status["capital_efficiency"] = self.capital_manager.get_capital_stats()
 
         # Add latency metrics
         status["latency"] = latency_monitor.get_all_stats()
