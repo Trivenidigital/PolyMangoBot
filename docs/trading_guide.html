@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyMangoBot - Edge-Based Trading System Guide</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --warning: #ca8a04;
+            --danger: #dc2626;
+            --bg-dark: #1e293b;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            background: var(--bg-light);
+        }
+
+        /* Navigation */
+        nav {
+            background: var(--bg-dark);
+            color: white;
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        nav h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        nav .subtitle {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        /* Sidebar */
+        .container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: white;
+            border-right: 1px solid var(--border);
+            padding: 2rem 1rem;
+            position: sticky;
+            top: 60px;
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-light);
+            margin-bottom: 0.5rem;
+            padding-left: 1rem;
+        }
+
+        .sidebar ul {
+            list-style: none;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 0.5rem 1rem;
+            color: var(--text-dark);
+            text-decoration: none;
+            border-radius: 6px;
+            margin-bottom: 2px;
+            font-size: 0.9rem;
+        }
+
+        .sidebar a:hover {
+            background: var(--bg-light);
+            color: var(--primary);
+        }
+
+        /* Main Content */
+        main {
+            flex: 1;
+            padding: 2rem 3rem;
+            max-width: 900px;
+        }
+
+        section {
+            margin-bottom: 4rem;
+        }
+
+        h2 {
+            color: var(--text-dark);
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        h3 {
+            color: var(--text-dark);
+            font-size: 1.25rem;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        h4 {
+            color: var(--text-light);
+            font-size: 1rem;
+            margin: 1rem 0 0.5rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text-dark);
+        }
+
+        /* Alert Boxes */
+        .alert {
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            border-left: 4px solid;
+        }
+
+        .alert-warning {
+            background: #fef3c7;
+            border-color: var(--warning);
+        }
+
+        .alert-danger {
+            background: #fee2e2;
+            border-color: var(--danger);
+        }
+
+        .alert-success {
+            background: #dcfce7;
+            border-color: var(--success);
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            border-color: var(--primary);
+        }
+
+        .alert-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-size: 1.25rem;
+        }
+
+        .card-icon.blue { background: #dbeafe; }
+        .card-icon.green { background: #dcfce7; }
+        .card-icon.yellow { background: #fef3c7; }
+        .card-icon.purple { background: #f3e8ff; }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-light);
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        tr:hover {
+            background: var(--bg-light);
+        }
+
+        /* Code blocks */
+        pre {
+            background: var(--bg-dark);
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            margin: 1rem 0;
+        }
+
+        code {
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        :not(pre) > code {
+            background: #e2e8f0;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin: 1rem 0 1rem 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Strategy Grid */
+        .strategy-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .strategy-grid {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                display: none;
+            }
+        }
+
+        /* Metrics */
+        .metrics-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin: 1rem 0;
+        }
+
+        .metric {
+            flex: 1;
+            min-width: 150px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-top: 0.25rem;
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-green { background: #dcfce7; color: #166534; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+
+        /* Comparison */
+        .comparison-table {
+            margin: 1.5rem 0;
+        }
+
+        .comparison-table th:first-child {
+            width: 30%;
+        }
+
+        .yes { color: var(--success); font-weight: 600; }
+        .no { color: var(--danger); font-weight: 600; }
+
+        /* Demo Output */
+        .demo-output {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .demo-output .highlight {
+            color: #4ade80;
+        }
+
+        .demo-output .signal {
+            color: #60a5fa;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-dark);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            margin-top: 4rem;
+        }
+
+        footer p {
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <h1>PolyMangoBot</h1>
+        <span class="subtitle">Edge-Based Trading System - Technical Guide</span>
+    </nav>
+
+    <div class="container">
+        <aside class="sidebar">
+            <h3>Getting Started</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#philosophy">Core Philosophy</a></li>
+                <li><a href="#speed-reality">Speed Reality Check</a></li>
+            </ul>
+
+            <h3>Trading Strategies</h3>
+            <ul>
+                <li><a href="#directional">Enhanced Directional</a></li>
+                <li><a href="#stat-arb">Statistical Arbitrage</a></li>
+                <li><a href="#illiquid">Illiquid Markets</a></li>
+                <li><a href="#volatility">Volatility Regime</a></li>
+            </ul>
+
+            <h3>Risk Management</h3>
+            <ul>
+                <li><a href="#risk-params">Risk Parameters</a></li>
+                <li><a href="#position-sizing">Position Sizing</a></li>
+                <li><a href="#loss-limits">Loss Limits</a></li>
+            </ul>
+
+            <h3>Configuration</h3>
+            <ul>
+                <li><a href="#config">Engine Configuration</a></li>
+                <li><a href="#thresholds">Signal Thresholds</a></li>
+            </ul>
+
+            <h3>Demo & Examples</h3>
+            <ul>
+                <li><a href="#demo">Live Demo Output</a></li>
+                <li><a href="#usage">Usage Examples</a></li>
+            </ul>
+        </aside>
+
+        <main>
+            <!-- Overview -->
+            <section id="overview">
+                <h2>System Overview</h2>
+
+                <p>PolyMangoBot is an edge-based trading system designed around <strong>realistic competitive advantages</strong>, not speed. This guide explains each component, strategy, and configuration option.</p>
+
+                <div class="alert alert-warning">
+                    <div class="alert-title">Critical Understanding</div>
+                    This system does NOT try to compete with high-frequency trading (HFT) firms on speed. They are 100-1000x faster with co-located servers. Our edge comes from <strong>signal quality</strong>, <strong>risk management</strong>, and <strong>longer timeframes</strong>.
+                </div>
+
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-value">4</div>
+                        <div class="metric-label">Trading Strategies</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">15min+</div>
+                        <div class="metric-label">Minimum Timeframe</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">50-60%</div>
+                        <div class="metric-label">Target Win Rate</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">1.5:1</div>
+                        <div class="metric-label">Min Risk/Reward</div>
+                    </div>
+                </div>
+
+                <h3>Key Files</h3>
+                <table>
+                    <tr>
+                        <th>File</th>
+                        <th>Purpose</th>
+                    </tr>
+                    <tr>
+                        <td><code>edge_strategies.py</code></td>
+                        <td>All four trading strategies with signal generation</td>
+                    </tr>
+                    <tr>
+                        <td><code>realistic_trading_engine.py</code></td>
+                        <td>Main engine with risk management</td>
+                    </tr>
+                    <tr>
+                        <td><code>run_demo.py</code></td>
+                        <td>Demonstration script</td>
+                    </tr>
+                    <tr>
+                        <td><code>config.py</code></td>
+                        <td>Configuration management</td>
+                    </tr>
+                </table>
+            </section>
+
+            <!-- Philosophy -->
+            <section id="philosophy">
+                <h2>Core Philosophy</h2>
+
+                <h3>What We DON'T Do</h3>
+                <ul>
+                    <li><span class="no">&#10007;</span> Compete on speed with HFT</li>
+                    <li><span class="no">&#10007;</span> Sub-second arbitrage</li>
+                    <li><span class="no">&#10007;</span> High-frequency trading (500+ trades/day)</li>
+                    <li><span class="no">&#10007;</span> Chase every small opportunity</li>
+                </ul>
+
+                <h3>What We DO</h3>
+                <ul>
+                    <li><span class="yes">&#10003;</span> Focus on signal QUALITY over quantity</li>
+                    <li><span class="yes">&#10003;</span> Trade longer timeframes (15min - 4hr)</li>
+                    <li><span class="yes">&#10003;</span> Exploit markets where HFT doesn't compete</li>
+                    <li><span class="yes">&#10003;</span> Use superior risk management</li>
+                    <li><span class="yes">&#10003;</span> Adapt to market conditions</li>
+                </ul>
+
+                <div class="alert alert-info">
+                    <div class="alert-title">The Real Edge</div>
+                    Most retail traders lose because of poor risk management and emotional decisions. Our systematic approach with strict risk controls IS the edge.
+                </div>
+            </section>
+
+            <!-- Speed Reality -->
+            <section id="speed-reality">
+                <h2>Speed Reality Check</h2>
+
+                <p>Here's an honest comparison of execution speeds:</p>
+
+                <table class="comparison-table">
+                    <tr>
+                        <th>Trader Type</th>
+                        <th>Execution Speed</th>
+                        <th>Our Comparison</th>
+                    </tr>
+                    <tr>
+                        <td>Co-located HFT</td>
+                        <td>1-10 milliseconds</td>
+                        <td><span class="badge badge-red">100-1000x faster</span></td>
+                    </tr>
+                    <tr>
+                        <td>Professional MM</td>
+                        <td>10-50 milliseconds</td>
+                        <td><span class="badge badge-red">20-100x faster</span></td>
+                    </tr>
+                    <tr>
+                        <td>Institutional Arb</td>
+                        <td>50-200 milliseconds</td>
+                        <td><span class="badge badge-yellow">5-25x faster</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Our Bot</strong></td>
+                        <td><strong>1-5 seconds</strong></td>
+                        <td><span class="badge badge-blue">Baseline</span></td>
+                    </tr>
+                    <tr>
+                        <td>Basic Retail</td>
+                        <td>5-30 seconds</td>
+                        <td><span class="badge badge-green">We're faster</span></td>
+                    </tr>
+                </table>
+
+                <div class="alert alert-danger">
+                    <div class="alert-title">Cross-Exchange Arbitrage is NOT Viable</div>
+                    Traditional arbitrage opportunities (price gaps between exchanges) last 10-100ms. With our 1-5 second execution, the opportunity is gone before we can act. This is why we focus on different edges.
+                </div>
+            </section>
+
+            <!-- Strategies -->
+            <section id="directional">
+                <h2>Strategy 1: Enhanced Directional</h2>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon blue">1</div>
+                        <div class="card-title">Multi-Timeframe Trend Following</div>
+                    </div>
+
+                    <p><strong>Edge Type:</strong> Prediction Quality</p>
+                    <p><strong>Timeframe:</strong> 15 minutes - 4 hours</p>
+                    <p><strong>Hold Time:</strong> 2-4 hours average</p>
+
+                    <h4>How It Works</h4>
+                    <ol>
+                        <li>Analyzes trends on 15m, 1h, and 4h timeframes</li>
+                        <li>Requires alignment across timeframes (all bullish or all bearish)</li>
+                        <li>Confirms with volume analysis</li>
+                        <li>Uses RSI for optimal entry timing</li>
+                        <li>Calculates targets using ATR (Average True Range)</li>
+                    </ol>
+
+                    <h4>Signal Requirements</h4>
+                    <table>
+                        <tr>
+                            <td>Min Trend Strength</td>
+                            <td>0.6 (configurable)</td>
+                        </tr>
+                        <tr>
+                            <td>Volume Confirmation</td>
+                            <td>Required (above average)</td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Timeframe Alignment</td>
+                            <td>Required (15m + 1h + 4h)</td>
+                        </tr>
+                    </table>
+
+                    <h4>Demo Output</h4>
+                    <div class="demo-output">
+[OK] Signal Generated!
+   Direction: <span class="highlight">LONG</span>
+   Entry: $52,076.88
+   Target: $53,343.39
+   Stop: $51,570.27
+   Expected Return: <span class="signal">1.18%</span>
+   Win Probability: <span class="signal">63.2%</span>
+   Risk/Reward: <span class="signal">2.50</span>
+   Signal Quality: 0.64
+   Kelly Fraction: 25.00%
+   Suggested Position: 12.50% of capital
+   Contributing Factors:
+      - Strong 15m trend (+0.75)</div>
+                </div>
+            </section>
+
+            <section id="stat-arb">
+                <h2>Strategy 2: Statistical Arbitrage</h2>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon green">2</div>
+                        <div class="card-title">Mean Reversion Pairs Trading</div>
+                    </div>
+
+                    <p><strong>Edge Type:</strong> Mean Reversion (Statistical Patterns)</p>
+                    <p><strong>Timeframe:</strong> Hours to days</p>
+                    <p><strong>Hold Time:</strong> 4-24 hours average</p>
+
+                    <h4>How It Works</h4>
+                    <ol>
+                        <li>Identifies correlated asset pairs (e.g., BTC/ETH)</li>
+                        <li>Calculates spread between normalized prices</li>
+                        <li>Computes Z-score of current spread vs historical</li>
+                        <li>Enters when Z-score exceeds threshold (e.g., > 2.0)</li>
+                        <li>Exits when spread reverts to mean (Z-score < 0.5)</li>
+                    </ol>
+
+                    <h4>Key Parameters</h4>
+                    <table>
+                        <tr>
+                            <td>Z-Score Entry</td>
+                            <td>2.0 (2 standard deviations)</td>
+                        </tr>
+                        <tr>
+                            <td>Z-Score Exit</td>
+                            <td>0.5 (reversion target)</td>
+                        </tr>
+                        <tr>
+                            <td>Min Correlation</td>
+                            <td>0.7 (70%)</td>
+                        </tr>
+                        <tr>
+                            <td>Lookback Period</td>
+                            <td>100 candles</td>
+                        </tr>
+                    </table>
+
+                    <div class="alert alert-info">
+                        <div class="alert-title">Why This Works</div>
+                        Statistical relationships persist for hours/days, not milliseconds. We don't need speed - we need patience for mean reversion to occur.
+                    </div>
+                </div>
+            </section>
+
+            <section id="illiquid">
+                <h2>Strategy 3: Illiquid Markets</h2>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon yellow">3</div>
+                        <div class="card-title">Low-Competition Market Making</div>
+                    </div>
+
+                    <p><strong>Edge Type:</strong> Less HFT Competition</p>
+                    <p><strong>Timeframe:</strong> Minutes to hours</p>
+                    <p><strong>Hold Time:</strong> 30 minutes average</p>
+
+                    <h4>Why HFT Avoids These Markets</h4>
+                    <ul>
+                        <li>Execution risk (can't fill large orders)</li>
+                        <li>Price impact too high</li>
+                        <li>Not worth the infrastructure cost</li>
+                    </ul>
+
+                    <h4>Our Opportunity</h4>
+                    <ul>
+                        <li>Wide spreads (2-5%+) persist for extended periods</li>
+                        <li>Can capture spread by patient market making</li>
+                        <li>Less competition = higher win rate</li>
+                    </ul>
+
+                    <h4>Signal Requirements</h4>
+                    <table>
+                        <tr>
+                            <td>Min Spread</td>
+                            <td>0.5% (configurable)</td>
+                        </tr>
+                        <tr>
+                            <td>Max Daily Volume</td>
+                            <td>$1,000,000</td>
+                        </tr>
+                        <tr>
+                            <td>Spread Persistence</td>
+                            <td>5+ minutes</td>
+                        </tr>
+                    </table>
+
+                    <h4>Demo Output</h4>
+                    <div class="demo-output">
+[OK] Signal Generated!
+   Symbol: SMALL_CAP
+   Direction: <span class="highlight">LONG</span>
+   Entry: $1.4500
+   Target: $1.5200
+   Expected Return: <span class="signal">4.63%</span>
+   Win Probability: <span class="signal">70.0%</span>
+   Contributing Factors:
+      - Spread: 4.83%
+      - Daily volume: $75,000
+      - Bid/ask imbalance: 1.00</div>
+                </div>
+            </section>
+
+            <section id="volatility">
+                <h2>Strategy 4: Volatility Regime</h2>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon purple">4</div>
+                        <div class="card-title">Adaptive Strategy Selection</div>
+                    </div>
+
+                    <p><strong>Edge Type:</strong> Condition Adaptation</p>
+                    <p><strong>Timeframe:</strong> Varies by regime</p>
+
+                    <h4>Regime Detection</h4>
+                    <p>Classifies market into three regimes based on ATR and recent volatility:</p>
+
+                    <table>
+                        <tr>
+                            <th>Regime</th>
+                            <th>Strategy</th>
+                            <th>Position Size</th>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-red">High Volatility</span></td>
+                            <td>Momentum following with wide stops</td>
+                            <td>Smaller (2%)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-green">Low Volatility</span></td>
+                            <td>Mean reversion with tight stops</td>
+                            <td>Larger (4-6%)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-yellow">Transitioning</span></td>
+                            <td>No trading (wait for clarity)</td>
+                            <td>None</td>
+                        </tr>
+                    </table>
+
+                    <div class="alert alert-success">
+                        <div class="alert-title">Edge Explanation</div>
+                        Most traders use static strategies. By adapting to conditions, we avoid taking mean-reversion trades in trending markets and vice versa.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Risk Management -->
+            <section id="risk-params">
+                <h2>Risk Management Parameters</h2>
+
+                <p>Risk management is the <strong>core edge</strong> of this system. These parameters protect capital and ensure long-term survival.</p>
+
+                <h3>Loss Limits</h3>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Default</th>
+                        <th>Effect</th>
+                    </tr>
+                    <tr>
+                        <td>Max Daily Loss</td>
+                        <td>3%</td>
+                        <td>Locks trading for remainder of day</td>
+                    </tr>
+                    <tr>
+                        <td>Max Weekly Loss</td>
+                        <td>8%</td>
+                        <td>Locks trading for remainder of week</td>
+                    </tr>
+                    <tr>
+                        <td>Max Drawdown</td>
+                        <td>15%</td>
+                        <td>Locks trading until manual review</td>
+                    </tr>
+                    <tr>
+                        <td>Consecutive Losses</td>
+                        <td>5</td>
+                        <td>Pauses trading temporarily</td>
+                    </tr>
+                </table>
+            </section>
+
+            <section id="position-sizing">
+                <h2>Position Sizing</h2>
+
+                <h3>Kelly Criterion</h3>
+                <p>Position sizes are calculated using the Kelly Criterion formula:</p>
+
+                <pre><code>Kelly Fraction = (Win_Prob * Risk_Reward - Loss_Prob) / Risk_Reward
+
+Example:
+- Win Probability: 60%
+- Risk/Reward: 2.0
+- Kelly = (0.60 * 2.0 - 0.40) / 2.0 = 0.40 (40%)
+
+Actual Position = Kelly * 0.5 (Half-Kelly for safety)
+                = 20% of capital</code></pre>
+
+                <h3>Adjustments</h3>
+                <ul>
+                    <li><strong>Signal Quality:</strong> Lower quality = smaller position</li>
+                    <li><strong>Consecutive Losses:</strong> Each loss reduces size by 15%</li>
+                    <li><strong>Risk Level:</strong> Conservative mode = 50% of calculated size</li>
+                </ul>
+            </section>
+
+            <section id="loss-limits">
+                <h2>Loss Limit Details</h2>
+
+                <div class="alert alert-warning">
+                    <div class="alert-title">Trading Lock Behavior</div>
+                    When any loss limit is hit, trading is automatically locked. This prevents emotional revenge trading and ensures capital preservation.
+                </div>
+
+                <h3>Lock Triggers</h3>
+                <table>
+                    <tr>
+                        <th>Trigger</th>
+                        <th>Duration</th>
+                        <th>Reset</th>
+                    </tr>
+                    <tr>
+                        <td>Daily Loss >= 3%</td>
+                        <td>Until next trading day</td>
+                        <td>Automatic at midnight UTC</td>
+                    </tr>
+                    <tr>
+                        <td>Weekly Loss >= 8%</td>
+                        <td>Until next trading week</td>
+                        <td>Automatic on Monday</td>
+                    </tr>
+                    <tr>
+                        <td>Drawdown >= 15%</td>
+                        <td>Indefinite</td>
+                        <td>Manual review required</td>
+                    </tr>
+                    <tr>
+                        <td>5 Consecutive Losses</td>
+                        <td>Temporary</td>
+                        <td>After 1 winning trade</td>
+                    </tr>
+                </table>
+            </section>
+
+            <!-- Configuration -->
+            <section id="config">
+                <h2>Engine Configuration</h2>
+
+                <h3>Risk Levels</h3>
+                <table>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Conservative</th>
+                        <th>Moderate</th>
+                        <th>Aggressive</th>
+                    </tr>
+                    <tr>
+                        <td>Max Position Size</td>
+                        <td>2%</td>
+                        <td>5%</td>
+                        <td>8%</td>
+                    </tr>
+                    <tr>
+                        <td>Max Exposure</td>
+                        <td>15%</td>
+                        <td>30%</td>
+                        <td>50%</td>
+                    </tr>
+                    <tr>
+                        <td>Max Daily Loss</td>
+                        <td>2%</td>
+                        <td>3%</td>
+                        <td>5%</td>
+                    </tr>
+                    <tr>
+                        <td>Min Signal Quality</td>
+                        <td>0.6</td>
+                        <td>0.5</td>
+                        <td>0.4</td>
+                    </tr>
+                    <tr>
+                        <td>Max Concurrent Positions</td>
+                        <td>3</td>
+                        <td>5</td>
+                        <td>8</td>
+                    </tr>
+                </table>
+
+                <h3>Python Configuration</h3>
+                <pre><code>from realistic_trading_engine import (
+    RealisticTradingEngine,
+    RealisticEngineConfig,
+    RiskLevel
+)
+
+# Create with preset
+engine = RealisticTradingEngine(
+    capital=10000.0,
+    config=RealisticEngineConfig.moderate()
+)
+
+# Or create custom config
+custom_config = RealisticEngineConfig(
+    starting_capital=10000.0,
+    max_capital_per_trade_pct=4.0,
+    max_total_exposure_pct=25.0,
+    max_daily_loss_pct=2.5,
+    max_weekly_loss_pct=6.0,
+    max_drawdown_pct=12.0,
+    risk_level=RiskLevel.MODERATE,
+    min_signal_quality=0.55,
+    min_win_probability=0.52,
+    min_risk_reward=1.8,
+    max_concurrent_positions=4
+)</code></pre>
+            </section>
+
+            <section id="thresholds">
+                <h2>Signal Thresholds</h2>
+
+                <p>Signals must pass these quality thresholds to be considered for trading:</p>
+
+                <table>
+                    <tr>
+                        <th>Threshold</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                    </tr>
+                    <tr>
+                        <td>min_signal_quality</td>
+                        <td>Combined quality score from all indicators</td>
+                        <td>0.5</td>
+                    </tr>
+                    <tr>
+                        <td>min_win_probability</td>
+                        <td>Estimated probability of profitable trade</td>
+                        <td>0.50 (50%)</td>
+                    </tr>
+                    <tr>
+                        <td>min_risk_reward</td>
+                        <td>Minimum reward-to-risk ratio</td>
+                        <td>1.5</td>
+                    </tr>
+                    <tr>
+                        <td>min_edge_score</td>
+                        <td>Combined edge score for ranking</td>
+                        <td>0.4</td>
+                    </tr>
+                </table>
+
+                <div class="alert alert-info">
+                    <div class="alert-title">Quality Over Quantity</div>
+                    These strict thresholds mean we take fewer trades, but each trade has a higher probability of success. This is intentional - we're not trying to trade frequently.
+                </div>
+            </section>
+
+            <!-- Demo -->
+            <section id="demo">
+                <h2>Live Demo Output</h2>
+
+                <p>Below is actual output from running <code>python run_demo.py</code>:</p>
+
+                <div class="demo-output">======================================================================
+  PolyMangoBot - Edge-Based Trading System Demonstration
+======================================================================
+
+Philosophy: We compete on SIGNAL QUALITY, not SPEED.
+HFT is 100-1000x faster. Our edge is being RIGHT, not fast.
+
+======================================================================
+INDIVIDUAL STRATEGY DEMONSTRATIONS
+======================================================================
+
+<span class="highlight">[1] ENHANCED DIRECTIONAL STRATEGY</span>
+--------------------------------------------------
+Edge: Signal quality through multi-timeframe analysis
+Timeframe: 15min - 4hr
+Focus: Being RIGHT, not fast
+
+<span class="signal">[OK] Signal Generated!</span>
+   Direction: LONG
+   Entry: $52,076.88
+   Target: $53,343.39
+   Stop: $51,570.27
+   Expected Return: 1.18%
+   Win Probability: 63.2%
+   Risk/Reward: 2.50
+   Signal Quality: 0.64
+   Kelly Fraction: 25.00%
+   Suggested Position: 12.50% of capital
+   Contributing Factors:
+      - Strong 15m trend (+0.75)
+
+<span class="highlight">[3] ILLIQUID MARKET STRATEGY</span>
+--------------------------------------------------
+Edge: Wide spreads in markets HFT avoids
+Timeframe: Minutes to hours
+Focus: Markets with low competition
+
+<span class="signal">[OK] Signal Generated!</span>
+   Symbol: SMALL_CAP
+   Direction: LONG
+   Entry: $1.4500
+   Target: $1.5200
+   Expected Return: 4.63%
+   Win Probability: 70.0%
+   Contributing Factors:
+      - Spread: 4.83%
+      - Daily volume: $75,000
+
+======================================================================
+REALISTIC TRADING ENGINE DEMONSTRATION
+======================================================================
+
+[*] Initializing Engine...
+   Capital: $10,000
+   Risk Level: MODERATE
+   Max Daily Loss: 3.0%
+   Max Position Size: 5.0%
+   Min Signal Quality: 0.5
+   Min Win Probability: 0.5
+   Min Risk/Reward: 1.5
+
+[#] FINAL PERFORMANCE REPORT
+==================================================
+   Total Trades: 0
+   Current Capital: $10000.00
+   Drawdown: 0.00%
+   Exposure: 0.0%
+   Open Positions: 0</div>
+            </section>
+
+            <section id="usage">
+                <h2>Usage Examples</h2>
+
+                <h3>Basic Usage</h3>
+                <pre><code>from realistic_trading_engine import RealisticTradingEngine, RealisticEngineConfig
+
+# Initialize
+engine = RealisticTradingEngine(
+    capital=10000.0,
+    config=RealisticEngineConfig.moderate()
+)
+
+# Load market data
+engine.update_market_data(
+    symbol="BTC",
+    candles_15m=btc_15m_candles,
+    candles_1h=btc_1h_candles,
+    candles_4h=btc_4h_candles,
+    orderbook={"best_bid": 42000, "best_ask": 42010, ...},
+    daily_volume=5000000
+)
+
+# Run trading cycle
+result = await engine.run_cycle()
+print(f"Signals: {result['signals_found']}")
+print(f"Opened: {result['positions_opened']}")
+print(f"Closed: {result['positions_closed']}")
+print(f"PnL: ${result['pnl']:.2f}")
+
+# Check performance
+perf = engine.get_performance()
+print(f"Win Rate: {perf['summary']['win_rate']:.1f}%")
+print(f"Total PnL: ${perf['summary']['total_pnl']:.2f}")</code></pre>
+
+                <h3>Running the Demo</h3>
+                <pre><code># From the project root:
+python run_demo.py</code></pre>
+
+                <h3>Running Individual Strategy Tests</h3>
+                <pre><code># Test edge strategies
+python -c "import asyncio; from edge_strategies import test_edge_strategies; asyncio.run(test_edge_strategies())"
+
+# Test realistic engine
+python -c "import asyncio; from realistic_trading_engine import test_realistic_engine; asyncio.run(test_realistic_engine())"</code></pre>
+            </section>
+
+            <!-- Realistic Expectations -->
+            <section id="expectations">
+                <h2>Realistic Expectations</h2>
+
+                <div class="alert alert-danger">
+                    <div class="alert-title">Important Disclaimer</div>
+                    Trading involves substantial risk. Past performance does not guarantee future results. These are target metrics, not guarantees.
+                </div>
+
+                <h3>Comparison: Claims vs Reality</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>Metric</th>
+                        <th>Unrealistic Claims</th>
+                        <th>Realistic Targets</th>
+                    </tr>
+                    <tr>
+                        <td>Trades per Week</td>
+                        <td>500+</td>
+                        <td>20-50 quality trades</td>
+                    </tr>
+                    <tr>
+                        <td>Win Rate</td>
+                        <td>70-90%</td>
+                        <td>50-60%</td>
+                    </tr>
+                    <tr>
+                        <td>Monthly Return</td>
+                        <td>100%+</td>
+                        <td>5-15% (if consistent)</td>
+                    </tr>
+                    <tr>
+                        <td>Expected Drawdown</td>
+                        <td>"Never lose"</td>
+                        <td>10-20% expected</td>
+                    </tr>
+                    <tr>
+                        <td>Avg Profit/Trade</td>
+                        <td>0.5%+</td>
+                        <td>0.2-0.4%</td>
+                    </tr>
+                </table>
+
+                <h3>Capital Allocation</h3>
+                <div class="metrics-row">
+                    <div class="metric">
+                        <div class="metric-value">40%</div>
+                        <div class="metric-label">Directional</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">30%</div>
+                        <div class="metric-label">Stat Arb</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">15%</div>
+                        <div class="metric-label">Illiquid</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">15%</div>
+                        <div class="metric-label">Volatility</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <h3>PolyMangoBot - Edge-Based Trading System</h3>
+        <p>Documentation generated on <script>document.write(new Date().toLocaleDateString())</script></p>
+        <p>Remember: Risk management is the only true edge in trading.</p>
+    </footer>
+</body>
+</html>

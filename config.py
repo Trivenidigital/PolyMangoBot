@@ -125,6 +125,46 @@ class WebSocketConfig:
 
 
 @dataclass(frozen=True)
+class InferenceConfig:
+    """Cross-market inference engine configuration"""
+    enabled: bool = True
+
+    # Family discovery
+    min_family_size: int = 2
+    max_family_size: int = 20
+    min_token_overlap: float = 0.5
+
+    # Detection thresholds
+    min_edge_pct: float = 0.5
+    min_leg_liquidity: float = 500.0
+    min_realizable_edge_pct: float = 0.3
+
+    # Position sizing
+    default_position_usd: float = 100.0
+    max_position_usd: float = 1000.0
+    max_position_pct_of_liquidity: float = 0.05
+
+    # Fee estimation
+    maker_fee_pct: float = 0.0
+    taker_fee_pct: float = 0.02
+    base_slippage_pct: float = 0.05
+
+    # Monitoring
+    poll_interval_seconds: float = 45.0
+    fast_poll_interval_seconds: float = 10.0
+    min_persistence_seconds: float = 30.0
+
+    # LLM settings
+    use_llm: bool = False
+    llm_provider: str = "anthropic"
+    llm_model: str = "claude-3-haiku-20240307"
+
+    # Auto-execution
+    auto_execute: bool = False
+    execute_edge_threshold_pct: float = 1.0
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     """Logging configuration"""
     level: LogLevel = LogLevel.INFO
@@ -142,6 +182,7 @@ class BotConfig:
     kelly: KellyConfig = field(default_factory=KellyConfig)
     websocket: WebSocketConfig = field(default_factory=WebSocketConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    inference: InferenceConfig = field(default_factory=InferenceConfig)
 
     # Bot behavior
     scan_interval_seconds: float = 5.0
@@ -239,6 +280,15 @@ class BotConfig:
             logging=LoggingConfig(
                 level=log_level,
                 file_path=os.getenv("LOG_FILE"),
+            ),
+            inference=InferenceConfig(
+                enabled=parse_bool("INFERENCE_ENABLED", True),
+                min_edge_pct=parse_float("INFERENCE_MIN_EDGE_PCT", 0.5, "INFERENCE_MIN_EDGE_PCT"),
+                min_leg_liquidity=parse_float("INFERENCE_MIN_LIQUIDITY", 500.0, "INFERENCE_MIN_LIQUIDITY"),
+                default_position_usd=parse_float("INFERENCE_POSITION_USD", 100.0, "INFERENCE_POSITION_USD"),
+                poll_interval_seconds=parse_float("INFERENCE_POLL_INTERVAL", 45.0, "INFERENCE_POLL_INTERVAL"),
+                use_llm=parse_bool("INFERENCE_USE_LLM", False),
+                auto_execute=parse_bool("INFERENCE_AUTO_EXECUTE", False),
             ),
             scan_interval_seconds=parse_float("SCAN_INTERVAL", 5.0, "SCAN_INTERVAL"),
             min_spread_percent=parse_float("MIN_SPREAD_PERCENT", 0.3, "MIN_SPREAD_PERCENT"),

@@ -1,0 +1,47 @@
+  Verification Plan
+
+     Unit Tests
+
+     1. Family Discovery Tests
+       - Test token extraction from various question formats
+       - Test grouping of related markets
+       - Test date parsing from questions
+     2. Detection Rules Tests
+       - Test monotonicity violation detection
+       - Test NO sweep profitability calculation
+       - Test exclusive/exhaustive constraint checking
+     3. Integration Tests
+       - Test full pipeline with mock market data
+       - Test integration with EnhancedTradingEngine
+
+     Manual Testing
+
+     1. Run demo mode:
+     python main_v4.py --dry-run --debug
+     2. Check for structural arb opportunities in logs
+     3. Verify no regressions in existing strategies
+
+     ---
+     Risk Considerations
+
+     1. Execution Risk: Multi-leg trades require all legs to fill. Use existing AdvancedOrderExecutor with atomic execution.
+     2. Slippage: Large positions on illiquid markets. Respect min_leg_liquidity threshold.
+     3. Timing: Opportunities are transient. ArbMonitor polls every 45 seconds; consider faster polling for high-value opportunities.
+     4. False Positives: NLP-based family discovery may group unrelated markets. Start with conservative token matching; add LLM classification later if
+      needed.
+
+     ---
+     Implementation Order
+
+     1. Create inference/models.py with data classes
+     2. Create inference/llm_classifier.py with LLM integration
+     3. Create inference/family_discovery.py with token-based grouping + LLM fallback
+     4. Create inference/relationship.py with classification logic
+     5. Create inference/detection_rules.py with all constraint checks
+     6. Create inference/trade_constructor.py and realizable_edge.py
+     7. Create inference/engine.py to orchestrate
+     8. Create inference/arb_monitor.py for continuous monitoring
+     9. Update config.py with InferenceConfig
+     10. Integrate into enhanced_trading_engine.py
+     11. Add tests
+     12. Run end-to-end verification
